@@ -9,7 +9,7 @@
 - **Department:** Department of Computer Science & Information Engineering (CSIE)
 - **Institution:** National Chung Cheng University (CCU)
 - **Members:**
-  - **Member 1:** `[Your Name]` (Student ID: `[Your Student ID]`)
+  - **Member 1:** `[Quang-Huy Nguyen]` (Student ID: `[615461004]`)
   - **Member 2:** `[Your Name]` (Student ID: `[Your Student ID]`)
 
 ---
