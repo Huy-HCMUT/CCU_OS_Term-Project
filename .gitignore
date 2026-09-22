@@ -1,0 +1,42 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C / Zephyr build artifacts
+build/
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.map
+.ninja*
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Large raw datasets & temporary logs
+*.csv.bak
+*.log
+data/raw_large/
+
+# LaTeX compilation auxiliary files
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+
+# Operating System & Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
