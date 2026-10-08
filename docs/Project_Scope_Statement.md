@@ -3,7 +3,7 @@
 
 - **Course:** Operating Systems (Fall 2026)
 - **Institution:** National Chung Cheng University (CCU)
-- **Document Version:** 2.4.0 (Pre-M2 Hardware-Verified Edition)
+- **Document Version:** 2.5.0 (Pre-M2 Measurement-Revised Edition)
 - **Document Status:** Active Execution (Milestone 1 Completed, M2 In-Progress)
 
 ---
@@ -22,6 +22,7 @@
   - [4.3 Measurement Methodology: Workload-Normalized Benchmark Design](#43-measurement-methodology-workload-normalized-benchmark-design)
     - [4.3.1 Dual-Threaded Execution Architecture](#431-dual-threaded-execution-architecture)
     - [4.3.2 Benchmark Timing Metrics & Definitions](#432-benchmark-timing-metrics--definitions)
+    - [4.3.3 Stress Levels](#433-stress-levels)
 - [5. Key Project Deliverables](#5-key-project-deliverables)
 - [6. High-Level Work Breakdown Structure (High-Level WBS)](#6-high-level-work-breakdown-structure-high-level-wbs)
   - [Team Roles & Lab Constraints](#team-roles)
@@ -49,7 +50,7 @@ Executing closed-loop Prescriptive Maintenance reveals an operating system dilem
 2. **Why a Microcontroller RTOS alone is not enough:** A Real-Time Operating System (RTOS) like Zephyr guarantees that time-critical tasks run on time without random pauses. However, microcontrollers have limited CPU power and small memory, making them incapable of running heavy vibration analytics.
 3. **The Proposed Dual-OS Solution:** We investigate a **Heterogeneous Dual-OS Architecture** on a single dual-chip board (the **Arduino UNO Q**) leveraging a **Multi-Rate Asymmetric Execution Model**:
    - **Cognitive Plane on Linux Processor (The Analytical Brain):** Processes 1024-sample vibration frames (~85.3 ms of physical signal at 12 kHz) using FFT and a 1D-CNN classifier at an analytical cadence of ~80–100 ms. When an updated bearing health assessment is produced, Linux sends the new speed derating setpoint to the MCU over the inter-processor serial link.
-   - **Reflex Plane on Zephyr Microcontroller (The Fast Muscle):** Executes the time-critical motor actuation loop at a strict, deterministic **10 ms interval (100 Hz)** with zero jitter. Zephyr holds the latest received setpoint and applies it each cycle without blocking or waiting for the next Linux update.
+   - **Reflex Plane on Zephyr Microcontroller (The Fast Muscle):** Executes the time-critical motor actuation loop at a strict, deterministic **10 ms interval (100 Hz)** with bounded, sub-millisecond jitter. Zephyr holds the latest received setpoint and applies it each cycle without blocking or waiting for the next Linux update.
    - **Inter-Processor Communication (IPC):** Serial channel (UART/SPI via Arduino Bridge/RPC layer — exact mechanism to be confirmed on the physical board) carrying lightweight setpoint messages. The protocol uses a **"latest-value-wins"** non-blocking design: Zephyr always keeps the most recently received setpoint, even if Linux is delayed.
 
 #### 1.3 Project Objectives
@@ -58,7 +59,7 @@ Executing closed-loop Prescriptive Maintenance reveals an operating system dilem
   - Configuration A: Monolithic Linux under standard Completely Fair Scheduling (CFS).
   - Configuration B: Monolithic Linux under POSIX Real-Time Priority Scheduling (`SCHED_FIFO`, priority 90) on the standard Linux kernel.
   - Configuration C: Heterogeneous Dual-OS (Linux Cognitive Plane + Zephyr RTOS Reflex Plane).
-- **Objective 3 (Stress & Latency Evaluation):** Measure how each configuration behaves under escalating background workload stress (0%, 50%, 100% CPU/memory/IO stress using `stress-ng`) and quantify the **Deadline Miss Ratio (DMR)**, **Cycle Period Jitter ($\sigma_J$)**, and **Worst-Case Cycle Latency ($\max T_k$)**.
+- **Objective 3 (Stress & Latency Evaluation):** Measure how each configuration behaves under escalating background workload stress (0%, 50%, 100% CPU/memory/IO stress using `stress-ng`; exact commands in §4.3.3) and quantify the **Deadline Miss Ratio (DMR)**, **Wake-up Jitter ($\sigma_L$)**, and **Worst-Case Wake-up Lateness ($\max L_k$)** (see §4.3.2).
 - **Objective 4 (Deliverables):** Produce clear comparison charts, presentation slides, and an academic project report explaining the OS trade-offs.
 
 ---
@@ -82,7 +83,7 @@ Rather than focusing on low-level code implementation details at this proposal s
 |  [ COMPONENT 2: Zephyr Real-Time Control Subsystem ]                              |
 |  - Runs on the dedicated microcontroller (STM32 Cortex-M33)                       |
 |  - Executes the 10 ms motor control loop with guaranteed real-time priority       |
-|  - Accurately measures cycle time using hardware timers                           |
+|  - Timestamps each cycle with the DWT hardware cycle counter (160 MHz)            |
 |                                                                                   |
 |  [ COMPONENT 4: Benchmarking & Measurement Harness ]                              |
 |  - Injects synthetic background stress to test system limits                      |
@@ -108,14 +109,14 @@ Rather than focusing on low-level code implementation details at this proposal s
 - **Development Tools & Utilities:**
   - Programming Language: C / Shell scripting / Python.
   - Build System & Toolchain: CMake, `west` (Zephyr meta-tool), and **Ninja** (a high-speed, parallel build execution backend required by Zephyr RTOS to compile C/C++ firmware rapidly), GCC ARM Embedded toolchain (`arm-none-eabi-gcc`).
-  - Local RTOS Emulation & Testing: Zephyr native POSIX simulator (`native_sim`) or QEMU ARM Cortex-M emulator (`qemu_cortex_m3`), enabling the remote teammate (Akash) to write, compile, and functionally verify Zephyr periodic timer apps locally without requiring the physical board.
+  - Local RTOS Emulation & Testing: Zephyr native POSIX simulator (`native_sim`) or QEMU ARM Cortex-M emulator (`mps2/an521`, a Cortex-M33 target; requires Linux/WSL on the host), enabling the remote teammate (Akash) to write, compile, and functionally verify Zephyr periodic timer apps locally without requiring the physical board.
   - System Stress Generator: `stress-ng` (a standard Linux tool used to simulate high CPU and memory workload).
   - Operating System Metrics: Standard OS timing functions (`clock_nanosleep`, `clock_gettime`) and resource usage statistics (`getrusage`) to record task interruptions.
   - Data Analysis & Plotting: Python (matplotlib / numpy / pandas) to generate latency distribution graphs, CDF curves, and comparison box plots.
 - **Benchmark Dataset Specification:**
   - **Name:** Case Western Reserve University (CWRU) Bearing Data Center Seeded Fault Dataset.
   - **Source / Download URL:** Official portal at [https://engineering.case.edu/bearingdatacenter](https://engineering.case.edu/bearingdatacenter) (Mirror/clean packages on Kaggle: `brnithish/cwru-bearing-dataset` or GitHub: `hasan-kamal/Bearing-Fault-Detection-CWRU`).
-  - **Selected Subset:** 12k Drive End Bearing Fault Data sampled at 12,000 Hz under 1–3 HP motor loads.
+  - **Selected Subset:** 12k Drive End Bearing Fault Data sampled at 12,000 Hz. The four selected files are all recorded at **0 HP motor load (~1797 rpm)** with 0.007-inch fault diameter; other loads (1–3 HP) may be added later for robustness.
   - **Target Classes:** 4 operational conditions — Normal Baseline (`97.mat`), Ball Fault (`118.mat`), Inner Race Fault (`105.mat`), Outer Race Fault (`130.mat`).
   - **Repository Location:** Downloaded into `data/raw/cwru/` and preprocessed into fixed 1024-sample windows in `data/processed/` for FFT analysis and model inference.
 
@@ -134,7 +135,7 @@ Defining clear boundaries and measurement protocols is critical to keeping the p
   - Real-Time Linux (`SCHED_FIFO`, priority 90) on the standard Linux kernel.
   - Dual-OS (Linux Cognitive Plane + Zephyr RTOS Reflex Plane).
 - Compare the three configurations under no load vs. heavy background stress (`stress-ng`).
-- Measure quantitative timing metrics: mean cycle period, worst-case cycle latency ($\max T_k$), period jitter standard deviation ($\sigma_J$), and Deadline Miss Ratio (DMR).
+- Measure quantitative timing metrics: wake-up lateness ($L_k$), worst-case lateness ($\max L_k$ and 99.9th percentile), jitter standard deviation ($\sigma_L$), mean cycle period, and Deadline Miss Ratio (DMR).
 - Produce academic reports and presentations matching course requirements.
 
 #### 4.2 Out-of-Scope (What We Will NOT Do)
@@ -152,30 +153,47 @@ To guarantee a scientifically rigorous, peer-review-proof comparison, the benchm
 
 | Configuration | 10 ms Control Loop (Timed Reflex) | Background Analytics (Cognitive Plane) | Background Contention | What the Benchmark Measures |
 | :--- | :--- | :--- | :--- | :--- |
-| **A (Linux CFS)** | **Linux Thread 1:** Periodic 10 ms loop (`clock_nanosleep`), reads latest setpoint from shared variable, logs timestamp | **Linux Thread 2:** Periodic ~85 ms loop, runs FFT + 1D-CNN inference, updates shared variable | CFS CPU time-slice sharing, kernel page faults, synthetic `stress-ng` | Wakeup-to-wakeup period jitter of Thread 1 |
-| **B (Linux `SCHED_FIFO`)** | **Linux Thread 1:** Same 10 ms loop, but elevated to real-time priority (`chrt -f 90`) | **Linux Thread 2:** Same ~85 ms analytics loop running at standard CFS priority | Linux kernel locks, interrupt handling, CPU cache thrashing from `stress-ng` | Wakeup-to-wakeup period jitter of Thread 1 |
-| **C (Dual-OS)** | **Zephyr `k_timer` on STM32 MCU:** Periodic 10 ms loop, reads latest setpoint from local SRAM, logs timestamp | **Linux Process:** Runs on Cortex-A53 at ~85 ms cadence, sends setpoint over serial IPC (`arduino-router`) | Linux 100% compute/memory stress (`stress-ng`) running concurrently on the MPU | Wakeup-to-wakeup period jitter of Zephyr MCU tick |
+| **A (Linux CFS)** | **Linux Thread 1:** Periodic 10 ms loop (`clock_nanosleep`), reads latest setpoint from shared variable, stores timestamp in a RAM buffer | **Linux Thread 2:** Periodic ~85 ms loop, runs FFT + 1D-CNN inference, updates shared variable | CFS CPU time-slice sharing, kernel page faults, synthetic `stress-ng` | Wake-up lateness of Thread 1 vs. its absolute release time |
+| **B (Linux `SCHED_FIFO`)** | **Linux Thread 1:** Same 10 ms loop, but elevated to real-time priority (`chrt -f 90`) | **Linux Thread 2:** Same ~85 ms analytics loop running at standard CFS priority | Linux kernel locks, interrupt handling, CPU cache thrashing from `stress-ng` | Wake-up lateness of Thread 1 vs. its absolute release time |
+| **C (Dual-OS)** | **Zephyr `k_timer` on STM32 MCU:** Periodic 10 ms loop, reads latest setpoint from local SRAM, stores DWT cycle-counter timestamp in a RAM buffer | **Linux Process:** Runs on Cortex-A53 at ~85 ms cadence, sends setpoint over serial IPC (`arduino-router`) | Linux 100% compute/memory stress (`stress-ng`) running concurrently on the MPU | Wake-up lateness of the Zephyr tick vs. its absolute release time |
 
 **Why This Eliminates All Bias:**
 1. **Identical Timed Workload:** In all three configurations, the 10 ms tick does not compute FFTs or neural networks inside its loop. It only wakes up on a timer, samples the latest prescription setpoint, records its timestamp, and sleeps.
 2. **Identical Computational Burden:** In all three configurations, the full FFT + 1D-CNN pipeline and `stress-ng` run concurrently on the system.
-3. **Pure OS Architecture Evaluation:** Any deadline misses observed in Config A and B are proven to stem purely from **operating system scheduling limitations and kernel contention**, while Config C demonstrates whether **hardware-enforced heterogeneous OS isolation** achieves true zero-jitter determinism.
+3. **OS Architecture Evaluation:** Because the timed workload is identical, differences between Configs A, B and C are attributed mainly to **operating system scheduling and kernel contention**, with shared-hardware effects (cache and DRAM contention on the MPU) acknowledged as a contributing factor. Config C tests whether **hardware-separated heterogeneous OS isolation** keeps lateness bounded under Linux stress.
+4. **No In-Loop I/O:** All 10,000 timestamps are buffered in RAM and written to CSV (Linux) or dumped over UART (Zephyr) only **after** the run completes, so logging cannot perturb the measured timing.
 
 ##### 4.3.2 Benchmark Timing Metrics & Definitions
 
-To ensure clear communication and avoid confusion between different types of "latency", all benchmark metrics are defined simply:
+All timing is measured against an **absolute schedule**: cycle $k$ has release time $R_k = t_0 + k \times 10\text{ ms}$. Linux uses `clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME)`; Zephyr uses a periodic `k_timer`. This avoids "period cancellation" (one late cycle followed by one short cycle looking like two normal periods).
 
 | Metric | What It Means | Target / Ideal | Concrete Example |
 | :--- | :--- | :---: | :--- |
-| **Cycle Period ($T$)** | The actual time between two loop wakeups. | **10.0 ms** | If cycle 1 starts at 0 ms and cycle 2 starts at 10.1 ms, the period is **10.1 ms**. |
-| **Jitter ($J$)** | How far the cycle drifted from the 10.0 ms target. | **0.0 ms** | If a cycle took 10.4 ms, the jitter is **+0.4 ms**. We report standard deviation ($\sigma$). |
-| **Worst-Case Latency (WCL)** | The longest, slowest cycle observed out of all 10,000 cycles. | **< 10.5 ms** | If 9,999 cycles were on time, but 1 cycle paused for 24 ms, WCL is **24.0 ms**. |
-| **Deadline Miss (Strict)** | Any cycle that took longer than the **10.0 ms** deadline ($T > 10.0\text{ ms}$). | **0 misses** | A cycle taking 10.2 ms is counted as a missed deadline. (>50 ms = Severe Freeze). |
+| **Wake-up Lateness ($L_k$)** | Actual wake-up time minus scheduled release time: $L_k = t_k - R_k$. The primary metric. | **≈ 0 ms** | Release at 30.0 ms, woke at 30.4 ms → $L_k$ = **0.4 ms**. |
+| **Cycle Period ($T_k$)** | Time between two consecutive wake-ups, $t_k - t_{k-1}$. Reported for reference only. | **10.0 ms** | Woke at 20.0 ms and 30.4 ms → $T_k$ = **10.4 ms**. |
+| **Jitter ($\sigma_L$)** | Standard deviation of $L_k$ over all 10,000 cycles. | **< 0.10 ms** (Config C) | Most cycles at 0.01–0.05 ms lateness → $\sigma_L$ ≈ 0.02 ms. |
+| **Worst-Case Lateness (WCL)** | The largest $L_k$ observed ($\max L_k$). The **99.9th percentile** of $L_k$ is reported alongside it as a tail metric less sensitive to a single outlier. | **< 0.5 ms** (Config C) | 9,999 cycles on time, 1 cycle woke 14 ms late → WCL = **14.0 ms**. |
+| **Deadline Miss** | Any cycle with lateness above the tolerance: **$L_k > 1.0\text{ ms}$**. | **0 misses** | $L_k$ = 0.3 ms is on time; $L_k$ = 1.6 ms is a miss. ($L_k$ > 40 ms = Severe Starvation.) |
 | **Deadline Miss Ratio (DMR)** | Percentage of the 10,000 cycles that arrived late. | **0.00%** | 5 misses out of 10,000 cycles = **0.05% DMR** ($\frac{5}{10,000} \times 100\%$). |
 
+> **Why a 1.0 ms tolerance and not a strict 10.00 ms period?** Jitter is two-sided, so with a strict $T_k > 10.00$ ms rule about half of all cycles on *any* OS (including Zephyr) would count as misses, making DMR = 0% impossible by definition. A 1.0 ms (10% of period) tolerance on absolute lateness separates real scheduling delays from timer noise.
+
+**Clock Sources & Limitations:**
+- **Linux (A, B):** `clock_gettime(CLOCK_MONOTONIC)`.
+- **Zephyr (C):** STM32U585 DWT cycle counter (`DWT->CYCCNT`, 160 MHz, 6.25 ns resolution), read independently of the scheduler. A GPIO toggle on pin **D2** is kept in the firmware for optional external verification with a logic analyzer.
+- **Limitation:** DWT shares the MCU crystal with the Zephyr system timer, so it captures scheduling jitter accurately but cannot detect oscillator drift. This will be stated in the final report; external D2 measurement will be added if a logic analyzer becomes available.
+
+##### 4.3.3 Stress Levels
+
+| Level | Command (proposed) |
+| :--- | :--- |
+| **0% (Idle)** | No `stress-ng`; only the benchmark and analytics thread/process run. |
+| **50%** | `stress-ng --cpu 2 --io 1 --vm 1 --vm-bytes 25%` |
+| **100%** | `stress-ng --cpu 4 --io 2 --vm 1 --vm-bytes 50%` |
+
 **Important Distinction: Two Different Timers in This Project**
-1. **Reflex Actuation Tick (10 ms):** The time-critical loop that actuates the motor. Every single cycle must run strictly within the 10.0 ms deadline. This is what we benchmark for DMR and Jitter.
-2. **Cognitive AI Update (~90 ms):** The background health evaluation on Linux (FFT + AI inference + sending serial setpoint $\approx 85\text{ ms} + 5\text{ ms} \approx 90\text{ ms}$). This runs asynchronously at its own natural pace and **never blocks or delays** the 10 ms motor tick.
+1. **Reflex Actuation Tick (10 ms):** The time-critical loop that actuates the motor. Every cycle must wake within 1.0 ms of its scheduled release time. This is what we benchmark for DMR, Jitter and WCL.
+2. **Cognitive AI Update (~85–100 ms):** The background health evaluation on Linux. Its cadence is set by data arrival: one 1024-sample window equals **85.3 ms of signal** at 12 kHz. The actual FFT + 1D-CNN **compute time** is expected to be much shorter and will be measured separately. This loop runs asynchronously at its own pace and **never blocks or delays** the 10 ms motor tick.
 
 ---
 
@@ -191,9 +209,9 @@ To ensure clear communication and avoid confusion between different types of "la
    - Latency distribution graphs (box plots and Cumulative Distribution Function curves) comparing the three configurations.
 3. **Course Deliverables & Academic Reports:**
    - **Milestone 1 (Sep 29):** 2-Page Project Proposal & Abstract + 5-10 min in-class presentation. ✅ **COMPLETED**
-   - **Milestone 2 (Oct 20):** Formal Written Progress Report describing environment setup and preliminary tests. ⏳ **3 Weeks Remaining**
-   - **Milestone 3 (Nov 10):** 25-Minute In-Class Presentation and live/recorded demo. ⏳ **6 Weeks Remaining**
-   - **Milestone 4 (Dec 29):** Final Written Report (up to 15 pages in IEEE format), codebase, and role breakdown. ⏳ **13 Weeks Remaining**
+   - **Milestone 2 (Oct 20):** Formal Written Progress Report describing environment setup and preliminary tests. ⏳ **Upcoming**
+   - **Milestone 3 (Nov 10):** 25-Minute In-Class Presentation and live/recorded demo. ⏳ **Upcoming**
+   - **Milestone 4 (Dec 29):** Final Written Report (up to 15 pages in IEEE format), codebase, and role breakdown. ⏳ **Upcoming**
 
 ### 6. High-Level Work Breakdown Structure (High-Level WBS)
 
@@ -220,10 +238,10 @@ The board (Arduino UNO Q) is located in Huy's lab. Akash works remotely from a s
 | P2.1b | **Investigate IPC link:** Confirm how QRB2210 talks to STM32U585 (UART? SPI? Arduino Bridge/RPC?) and document the serial interface | Huy 🔧 | Yes | |
 | P2.2 | Install `stress-ng`, `build-essential` on board | Huy 🔧 | Yes | |
 | P2.3 | Ingest CWRU bearing vibration dataset (`data/raw/cwru/`) onto board filesystem | Huy 🔧 | Yes | |
-| P2.4 | Write dual-threaded C benchmark for Linux: Thread 1 = 10 ms control tick (`clock_nanosleep`, logs CSV); Thread 2 = ~85 ms analytics loop (FFT, updates setpoint) | Huy 🔧 | Yes | |
+| P2.4 | Write dual-threaded C benchmark for Linux: Thread 1 = 10 ms control tick (`clock_nanosleep` with `TIMER_ABSTIME`, timestamps buffered in RAM, CSV written after run); Thread 2 = ~85 ms analytics loop (FFT, updates setpoint) | Huy 🔧 | Yes | |
 | P2.5 | Run Config A: standard Linux CFS scheduling | Huy 🔧 | Yes | |
 | P2.6 | Run Config B: RT-FIFO scheduling (`sudo chrt -f 90`) | Huy 🔧 | Yes | |
-| P2.7 | Evaluate both under idle and stress (`stress-ng --cpu 4 --vm 1`) | Huy 🔧 | Yes | |
+| P2.7 | Evaluate both at 0% / 50% / 100% stress (commands in §4.3.3) | Huy 🔧 | Yes | |
 | P2.8 | Write shell scripts for automated stress test scenarios | Akash 💻 | No | |
 | P2.9 | Draft and submit **M2 Progress Report (Due Oct 20)** | Both | - | |
 | | | | | |
@@ -236,12 +254,12 @@ The board (Arduino UNO Q) is located in Huy's lab. Akash works remotely from a s
 | P3.5 | Integrate TFLite C/C++ runtime into Thread 2 (analytics thread: FFT -> inference -> prescription) | Huy 🔧 | Yes | |
 | | | | | |
 | **P4** | **Phase 4: Zephyr RTOS Bring-up & Real-Time Timer Setup (Wk 5-7, Oct 7 - Oct 27)** | | | |
-| | *Goal: Set up Zephyr toolchain (west + CMake + Ninja) and establish zero-jitter baseline* | | | |
+| | *Goal: Set up Zephyr toolchain (west + CMake + Ninja) and establish low-jitter baseline* | | | |
 | P4.1 | Install Zephyr SDK, CMake, Ninja, `west` on laptop; test with `native_sim` | Akash 💻 | No | |
 | P4.2 | Configure BSP, device tree, pin mux for STM32U585 Cortex-M33 | Akash 💻 | No | |
 | P4.3 | Develop Zephyr 10 ms timer app (`k_timer`); verify logic locally in `native_sim` | Akash 💻 | No | |
-| P4.4 | Receive binary from Akash, flash to MCU, verify jitter over UART | Huy 🔧 | Yes | |
-| P4.5 | Confirm zero-jitter RTOS baseline before IPC connection | Huy 🔧 | Yes | |
+| P4.4 | Receive binary from Akash, flash to MCU, dump DWT timestamps over UART after the run and check jitter | Huy 🔧 | Yes | |
+| P4.5 | Confirm sub-millisecond RTOS baseline (no deadline misses) before IPC connection | Huy 🔧 | Yes | |
 | P4.6 | Remote debugging via screen-share (Akash adjusts code, Huy re-flashes) | Both | Yes | |
 | | | | | |
 | **P5** | **Phase 5: Dual-OS Communication & Live Demo (Wk 7-9, Oct 26 - Nov 10) — [Supports M3]** | | | |
@@ -257,7 +275,7 @@ The board (Arduino UNO Q) is located in Huy's lab. Akash works remotely from a s
 | | *Goal: Collect 10,000-cycle datasets across 9 test matrices for M4* | | | |
 | P6.1 | Execute 10,000-cycle runs across 9 matrices (3 configs x 3 stress levels), export CSVs | Huy 🔧 | Yes | |
 | P6.2 | Generate visualizations: CDF curves, latency box plots, jitter distribution | Akash 💻 | No | |
-| P6.3 | Calculate KPIs: DMR, 99.9th percentile worst-case latency, jitter std dev | Akash 💻 | No | |
+| P6.3 | Calculate KPIs: DMR, worst-case lateness (max and 99.9th percentile), jitter std dev | Akash 💻 | No | |
 | | | | | |
 | **P7** | **Phase 7: IEEE Final Report & Codebase Packaging (Wk 13-16, Dec 7 - Dec 29) — [Supports M4]** | | | |
 | | *Goal: Submit 15-page IEEE report and complete code repository* | | | |
@@ -278,9 +296,9 @@ The project milestones are aligned with the official deadlines established in th
 | Milestone | Target Date | Status | Time Window | Contributing WBS Phases | Description & Major Deliverables | Primary Focus |
 | :---: | :---: | :---: | :---: | :---: | :--- | :--- |
 | **M1** | **Sep 29** | ✅ **COMPLETED** | Weeks 1 - 3 | **Phase 1 (P1)** | **Project Proposal & Abstract:** Submitted 2-page proposal and presented in class. | Problem definition, scope, and dual-OS concept |
-| **M2** | **Oct 20** | ⏳ **UPCOMING** | Weeks 4 - 6 (3 wks left) | **Phase 2 (P2) & Phase 3 (P3)** | **Progress Report:** Submit formal written report detailing setup and preliminary results. | Platform bring-up, baseline benchmarks (Config A & B), and offline model |
-| **M3** | **Nov 10** | ⏳ **UPCOMING** | Weeks 7 - 9 (6 wks left) | **Phase 4 (P4) & Phase 5 (P5)** | **Class Presentation & Demo:** Deliver 25-minute presentation and live/recorded demo. | Dual-OS integration (Config C), model inference, and stress evaluation |
-| **M4** | **Dec 29** | ⏳ **FINAL** | Weeks 10 - 16 (13 wks left) | **Phase 6 (P6) & Phase 7 (P7)** | **Final Report Due:** Submit complete 15-page report in IEEE format, code repository, and roles. | In-depth OS analysis, complete 10k-cycle data, and documentation |
+| **M2** | **Oct 20** | ⏳ **UPCOMING** | Weeks 4 - 6 | **Phase 2 (P2) & Phase 3 (P3)** | **Progress Report:** Submit formal written report detailing setup and preliminary results. | Platform bring-up, baseline benchmarks (Config A & B), and offline model |
+| **M3** | **Nov 10** | ⏳ **UPCOMING** | Weeks 7 - 9 | **Phase 4 (P4) & Phase 5 (P5)** | **Class Presentation & Demo:** Deliver 25-minute presentation and live/recorded demo. | Dual-OS integration (Config C), model inference, and stress evaluation |
+| **M4** | **Dec 29** | ⏳ **FINAL** | Weeks 10 - 16 | **Phase 6 (P6) & Phase 7 (P7)** | **Final Report Due:** Submit complete 15-page report in IEEE format, code repository, and roles. | In-depth OS analysis, complete 10k-cycle data, and documentation |
 
 ---
 
@@ -289,12 +307,12 @@ The project milestones are aligned with the official deadlines established in th
 The project will be considered successful when the following quantitative engineering benchmarks and academic standards are fulfilled:
 
 1. **Benchmark Execution Stability:** All 10,000 continuous control cycles execute reliably to completion without application crash, kernel panic, or buffer overflow across all 9 experimental test runs (3 Configurations $\times$ 3 Stress Levels).
-2. **Quantitative Real-Time Metrics & Thresholds (Formally Defined in §4.3.1):**
+2. **Quantitative Real-Time Metrics & Thresholds (Formally Defined in §4.3.2):**
    - **Nominal Cycle Period ($T_{\text{nom}}$):** Exactly $10.00\text{ ms}$ ($100\text{ Hz}$).
-   - **Deadline Miss Criterion (Strict):** Any observed cycle period exceeding the nominal time budget, **$T_k > 10.00\text{ ms}$**, is officially classified as a **Deadline Miss**. Delays $T_k > 50.00\text{ ms}$ are flagged as **Severe System Starvation**.
+   - **Deadline Miss Criterion:** A cycle whose wake-up lateness exceeds the tolerance, **$L_k > 1.0\text{ ms}$**, is classified as a **Deadline Miss**. Lateness $L_k > 40\text{ ms}$ is flagged as **Severe System Starvation**.
    - **Empirical Target KPIs:**
-     - **Configuration C (Dual-OS):** Must achieve a Deadline Miss Ratio of **$\text{DMR} = 0.00\%$** under 100% Linux stress (`stress-ng --cpu 4 --vm 1`), with cycle period jitter standard deviation **$\sigma_J < 0.10\text{ ms}$** and Worst-Case Cycle Latency **$\text{WCL} < 10.50\text{ ms}$**, proving absolute temporal isolation.
-     - **Configurations A & B (Linux CFS & `SCHED_FIFO`):** Must capture statistically significant latency degradation under heavy load ($\text{DMR} > 0\%$ and worst-case spikes $\text{WCL} > 20.00\text{ ms}$), providing empirical validation of GPOS scheduling preemption and memory page-fault stalls.
+     - **Configuration C (Dual-OS):** Must achieve **$\text{DMR} = 0.00\%$** under 100% Linux stress (§4.3.3), with jitter **$\sigma_L < 0.10\text{ ms}$** and worst-case lateness **$\text{WCL} < 0.50\text{ ms}$**, demonstrating temporal isolation from Linux load.
+     - **Configurations A & B (Linux CFS & `SCHED_FIFO`):** Must be measured under identical conditions and reported with the same metrics. *Hypothesis (not a pass/fail condition):* Config A shows DMR > 0% and WCL > 10 ms under heavy load; Config B substantially reduces this but may not fully eliminate tail latency. Either outcome is a valid result and will be analyzed in the report.
 3. **Academic Deliverable Standards:**
    - All four course milestones (M1, M2, M3, M4) submitted strictly by the official deadlines.
    - Individual teammate contributions (Huy vs. Akash) clearly documented to satisfy the syllabus peer-evaluation criteria.
@@ -311,7 +329,7 @@ The project will be considered successful when the following quantitative engine
 
 #### 9.2 Constraints & Risk Mitigations
 - **Single Hardware Board Constraint:** Only Huy has physical access to the board.
-  - *Mitigation:* Akash utilizes Zephyr's host emulator (`native_sim`) and QEMU to write, build, and test Zephyr application logic locally before passing compiled binaries to Huy for hardware deployment.
+  - *Mitigation:* Akash utilizes Zephyr's host emulator (`native_sim`, via WSL) and QEMU (`mps2/an521`) to write, build, and test Zephyr application logic locally before passing compiled binaries to Huy for hardware deployment.
 - **Hardware Corruption / Kernel Crash Risk:** Intensive stress testing (`stress-ng`) and direct hardware register access can cause OS crashes or filesystem corruption.
   - *Mitigation:* A golden backup image of the Debian filesystem is maintained on cloud storage, allowing full board re-flashing within 15 minutes.
 - **Contingency Schedule Buffer:** If dual-OS inter-processor communication setup takes longer than anticipated, Phase 2 (Config A vs Config B on Linux) provides complete, valid comparative operating systems data for Milestone 2 (Oct 20), guaranteeing that the team never misses an academic deadline.
