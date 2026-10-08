@@ -3,8 +3,8 @@
 
 - **Course:** Operating Systems (Fall 2026)
 - **Institution:** National Chung Cheng University (CCU)
-- **Document Version:** 2.3.0 (Peer-Reviewed & Quantitative Execution Edition)
-- **Document Status:** Active Execution (Milestone 1 Completed)
+- **Document Version:** 2.4.0 (Pre-M2 Hardware-Verified Edition)
+- **Document Status:** Active Execution (Milestone 1 Completed, M2 In-Progress)
 
 ---
 
@@ -16,9 +16,12 @@
   - [1.3 Project Objectives](#13-project-objectives)
 - [2. High-Level System Components](#2-high-level-system-components)
 - [3. Technical Environment & Tools](#3-technical-environment--tools)
-- [4. Scope Boundaries: In-Scope vs. Out-of-Scope](#4-scope-boundaries-in-scope-vs-out-of-scope)
+- [4. Scope Boundaries & Measurement Methodology](#4-scope-boundaries--measurement-methodology)
   - [4.1 In-Scope (What We Will Do)](#41-in-scope-what-we-will-do)
   - [4.2 Out-of-Scope (What We Will NOT Do)](#42-out-of-scope-what-we-will-not-do)
+  - [4.3 Measurement Methodology: Workload-Normalized Benchmark Design](#43-measurement-methodology-workload-normalized-benchmark-design)
+    - [4.3.1 Dual-Threaded Execution Architecture](#431-dual-threaded-execution-architecture)
+    - [4.3.2 Benchmark Timing Metrics & Definitions](#432-benchmark-timing-metrics--definitions)
 - [5. Key Project Deliverables](#5-key-project-deliverables)
 - [6. High-Level Work Breakdown Structure (High-Level WBS)](#6-high-level-work-breakdown-structure-high-level-wbs)
   - [Team Roles & Lab Constraints](#team-roles)
@@ -45,9 +48,9 @@ Executing closed-loop Prescriptive Maintenance reveals an operating system dilem
 1. **Why Linux alone struggles:** General-Purpose Operating Systems (GPOS) like Linux provide rich software libraries for heavy math (like Fast Fourier Transform vibration analytics and neural network inference). However, Linux is designed to be fair to all running programs. When background tasks run, Linux may pause the control program to give CPU time to other apps or to manage memory. These unpredictable pauses can exceed 10 to 50 milliseconds, causing missed deadlines.
 2. **Why a Microcontroller RTOS alone is not enough:** A Real-Time Operating System (RTOS) like Zephyr guarantees that time-critical tasks run on time without random pauses. However, microcontrollers have limited CPU power and small memory, making them incapable of running heavy vibration analytics.
 3. **The Proposed Dual-OS Solution:** We investigate a **Heterogeneous Dual-OS Architecture** on a single dual-chip board (the **Arduino UNO Q**) leveraging a **Multi-Rate Asymmetric Execution Model**:
-   - **Cognitive Plane on Linux Processor (The Analytical Brain):** Processes 1024-sample vibration frames (~85.3 ms of physical signal at 12 kHz) using FFT and a 1D-CNN classifier at an analytical cadence of ~80–100 ms. When an updated bearing health assessment is produced, Linux deposits the new speed derating recommendation into a shared memory mailbox.
-   - **Reflex Plane on Zephyr Microcontroller (The Fast Muscle):** Executes the time-critical motor actuation loop at a strict, deterministic **10 ms interval (100 Hz)** with zero jitter. Zephyr reads the latest active setpoint from shared memory asynchronously without blocking or waiting for Linux.
-   - **Inter-Processor Communication (IPC):** Lock-free shared memory channel that completely decouples the high-frequency control loop from the variable-duration AI inference pipeline.
+   - **Cognitive Plane on Linux Processor (The Analytical Brain):** Processes 1024-sample vibration frames (~85.3 ms of physical signal at 12 kHz) using FFT and a 1D-CNN classifier at an analytical cadence of ~80–100 ms. When an updated bearing health assessment is produced, Linux sends the new speed derating setpoint to the MCU over the inter-processor serial link.
+   - **Reflex Plane on Zephyr Microcontroller (The Fast Muscle):** Executes the time-critical motor actuation loop at a strict, deterministic **10 ms interval (100 Hz)** with zero jitter. Zephyr holds the latest received setpoint and applies it each cycle without blocking or waiting for the next Linux update.
+   - **Inter-Processor Communication (IPC):** Serial channel (UART/SPI via Arduino Bridge/RPC layer — exact mechanism to be confirmed on the physical board) carrying lightweight setpoint messages. The protocol uses a **"latest-value-wins"** non-blocking design: Zephyr always keeps the most recently received setpoint, even if Linux is delayed.
 
 #### 1.3 Project Objectives
 - **Objective 1 (Architecture Setup):** Establish a functional dual-OS communication pipeline between Linux and Zephyr RTOS on the Arduino UNO Q.
@@ -55,7 +58,7 @@ Executing closed-loop Prescriptive Maintenance reveals an operating system dilem
   - Configuration A: Monolithic Linux under standard Completely Fair Scheduling (CFS).
   - Configuration B: Monolithic Linux under POSIX Real-Time Priority Scheduling (`SCHED_FIFO`, priority 90) on the standard Linux kernel.
   - Configuration C: Heterogeneous Dual-OS (Linux Cognitive Plane + Zephyr RTOS Reflex Plane).
-- **Objective 3 (Stress & Latency Evaluation):** Measure how each configuration behaves under escalating background workload stress (0%, 50%, 100% CPU/memory/IO stress using `stress-ng`) and quantify the **Deadline Miss Ratio (DMR)** and **Worst-Case Latency**.
+- **Objective 3 (Stress & Latency Evaluation):** Measure how each configuration behaves under escalating background workload stress (0%, 50%, 100% CPU/memory/IO stress using `stress-ng`) and quantify the **Deadline Miss Ratio (DMR)**, **Cycle Period Jitter ($\sigma_J$)**, and **Worst-Case Cycle Latency ($\max T_k$)**.
 - **Objective 4 (Deliverables):** Produce clear comparison charts, presentation slides, and an academic project report explaining the OS trade-offs.
 
 ---
@@ -74,7 +77,7 @@ Rather than focusing on low-level code implementation details at this proposal s
 |  - Tracks operating system interruptions (context switches and memory stalls)     |
 |                                         |                                         |
 |  [ COMPONENT 3: Inter-Processor Communication (IPC) Bridge ]                      |
-|  - Fast message-passing channel between both processors using shared memory       |
+|  - Serial message channel (UART/SPI) between both processors                      |
 |                                         |                                         |
 |  [ COMPONENT 2: Zephyr Real-Time Control Subsystem ]                              |
 |  - Runs on the dedicated microcontroller (STM32 Cortex-M33)                       |
@@ -89,7 +92,7 @@ Rather than focusing on low-level code implementation details at this proposal s
 
 1. **Component 1 (Linux Analytics Subsystem):** Executes the heavy analytical workload (1024-point vibration FFT + 1D-CNN condition inference). Based on the detected bearing condition (Normal, Ball Fault, Inner Race Fault, Outer Race Fault), a **deterministic rule-based Look-Up Table (LUT / `if-else` policy)** calculates the prescribed motor speed derating setpoint (100%, 85%, 70%, or 60%) to relieve mechanical stress.
 2. **Component 2 (Zephyr Real-Time Control Subsystem):** Runs the time-sensitive motor control task at a fixed 10 ms interval. Because it runs on a dedicated real-time microcontroller, it is isolated from Linux background activity.
-3. **Component 3 (Inter-Processor Communication Bridge):** A shared mailbox where Linux deposits speed recommendations, and the Zephyr microcontroller reads them safely without waiting or freezing.
+3. **Component 3 (Inter-Processor Communication Bridge):** A serial message channel (UART/SPI via Arduino Bridge/RPC) where Linux sends speed recommendations, and the Zephyr microcontroller receives them non-blocking using a "latest-value-wins" protocol.
 4. **Component 4 (Benchmarking & Measurement Harness):** Automated test scripts that run the 10,000-cycle experiment under different stress levels and record timing logs for analysis.
 
 ---
@@ -118,20 +121,20 @@ Rather than focusing on low-level code implementation details at this proposal s
 
 ---
 
-### 4. Scope Boundaries: In-Scope vs. Out-of-Scope
+### 4. Scope Boundaries & Measurement Methodology
 
-Defining clear boundaries is critical to keeping the project focused and achievable within one academic semester:
+Defining clear boundaries and measurement protocols is critical to keeping the project focused and scientifically rigorous:
 
 #### 4.1 In-Scope (What We Will Do)
 - Configure the Arduino UNO Q board to run both Linux (Debian) and Zephyr RTOS.
 - Implement realistic vibration analytical workload using CWRU bearing dataset playback (1024-point frames, FFT, TFLite 1D-CNN inference) coupled with a periodic 10 ms control loop.
-- Implement an inter-processor message exchange between Linux and Zephyr using shared memory.
+- Implement an inter-processor message exchange between Linux and Zephyr over the board's serial link (UART/SPI via Arduino Bridge/RPC layer).
 - Benchmark 10,000 continuous cycles for:
   - Standard Linux (CFS).
   - Real-Time Linux (`SCHED_FIFO`, priority 90) on the standard Linux kernel.
   - Dual-OS (Linux Cognitive Plane + Zephyr RTOS Reflex Plane).
 - Compare the three configurations under no load vs. heavy background stress (`stress-ng`).
-- Measure average latency, worst-case latency, jitter standard deviation, and number of missed deadlines.
+- Measure quantitative timing metrics: mean cycle period, worst-case cycle latency ($\max T_k$), period jitter standard deviation ($\sigma_J$), and Deadline Miss Ratio (DMR).
 - Produce academic reports and presentations matching course requirements.
 
 #### 4.2 Out-of-Scope (What We Will NOT Do)
@@ -140,6 +143,39 @@ Defining clear boundaries is critical to keeping the project focused and achieva
 - **No Complex Numerical Optimization for Prescriptions:** The Prescriptive Maintenance (PsM) decision is implemented as a fast, deterministic rule-based Look-Up Table (LUT / `if-else` derating policy) that maps detected fault classes to speed setpoints (100%, 85%, 70%, 60%). Complex multi-objective quadratic optimization or enterprise factory scheduling solvers are intentionally excluded to keep the focus squarely on Operating System scheduling latency, page faults, and inter-processor communication determinism.
 - **No Graphical User Interface (GUI):** Tests will run from the command line (CLI) and generate log files; no complex desktop or web UI will be created.
 - **No Cloud or Internet Connectivity:** All experiments run locally on the board. Wi-Fi and Cloud networking are excluded to prevent network lag from distorting OS measurement data.
+
+#### 4.3 Measurement Methodology: Workload-Normalized Benchmark Design
+
+##### 4.3.1 Dual-Threaded Execution Architecture
+
+To guarantee a scientifically rigorous, peer-review-proof comparison, the benchmark enforces **Option 2 (Dual-Threaded Asymmetric Decoupling)** across all configurations. The timed 10 ms control loop executes the **exact same minimal workload** in every configuration:
+
+| Configuration | 10 ms Control Loop (Timed Reflex) | Background Analytics (Cognitive Plane) | Background Contention | What the Benchmark Measures |
+| :--- | :--- | :--- | :--- | :--- |
+| **A (Linux CFS)** | **Linux Thread 1:** Periodic 10 ms loop (`clock_nanosleep`), reads latest setpoint from shared variable, logs timestamp | **Linux Thread 2:** Periodic ~85 ms loop, runs FFT + 1D-CNN inference, updates shared variable | CFS CPU time-slice sharing, kernel page faults, synthetic `stress-ng` | Wakeup-to-wakeup period jitter of Thread 1 |
+| **B (Linux `SCHED_FIFO`)** | **Linux Thread 1:** Same 10 ms loop, but elevated to real-time priority (`chrt -f 90`) | **Linux Thread 2:** Same ~85 ms analytics loop running at standard CFS priority | Linux kernel locks, interrupt handling, CPU cache thrashing from `stress-ng` | Wakeup-to-wakeup period jitter of Thread 1 |
+| **C (Dual-OS)** | **Zephyr `k_timer` on STM32 MCU:** Periodic 10 ms loop, reads latest setpoint from local SRAM, logs timestamp | **Linux Process:** Runs on Cortex-A53 at ~85 ms cadence, sends setpoint over serial IPC (`arduino-router`) | Linux 100% compute/memory stress (`stress-ng`) running concurrently on the MPU | Wakeup-to-wakeup period jitter of Zephyr MCU tick |
+
+**Why This Eliminates All Bias:**
+1. **Identical Timed Workload:** In all three configurations, the 10 ms tick does not compute FFTs or neural networks inside its loop. It only wakes up on a timer, samples the latest prescription setpoint, records its timestamp, and sleeps.
+2. **Identical Computational Burden:** In all three configurations, the full FFT + 1D-CNN pipeline and `stress-ng` run concurrently on the system.
+3. **Pure OS Architecture Evaluation:** Any deadline misses observed in Config A and B are proven to stem purely from **operating system scheduling limitations and kernel contention**, while Config C demonstrates whether **hardware-enforced heterogeneous OS isolation** achieves true zero-jitter determinism.
+
+##### 4.3.2 Benchmark Timing Metrics & Definitions
+
+To ensure clear communication and avoid confusion between different types of "latency", all benchmark metrics are defined simply:
+
+| Metric | What It Means | Target / Ideal | Concrete Example |
+| :--- | :--- | :---: | :--- |
+| **Cycle Period ($T$)** | The actual time between two loop wakeups. | **10.0 ms** | If cycle 1 starts at 0 ms and cycle 2 starts at 10.1 ms, the period is **10.1 ms**. |
+| **Jitter ($J$)** | How far the cycle drifted from the 10.0 ms target. | **0.0 ms** | If a cycle took 10.4 ms, the jitter is **+0.4 ms**. We report standard deviation ($\sigma$). |
+| **Worst-Case Latency (WCL)** | The longest, slowest cycle observed out of all 10,000 cycles. | **< 10.5 ms** | If 9,999 cycles were on time, but 1 cycle paused for 24 ms, WCL is **24.0 ms**. |
+| **Deadline Miss (Strict)** | Any cycle that took longer than the **10.0 ms** deadline ($T > 10.0\text{ ms}$). | **0 misses** | A cycle taking 10.2 ms is counted as a missed deadline. (>50 ms = Severe Freeze). |
+| **Deadline Miss Ratio (DMR)** | Percentage of the 10,000 cycles that arrived late. | **0.00%** | 5 misses out of 10,000 cycles = **0.05% DMR** ($\frac{5}{10,000} \times 100\%$). |
+
+**Important Distinction: Two Different Timers in This Project**
+1. **Reflex Actuation Tick (10 ms):** The time-critical loop that actuates the motor. Every single cycle must run strictly within the 10.0 ms deadline. This is what we benchmark for DMR and Jitter.
+2. **Cognitive AI Update (~90 ms):** The background health evaluation on Linux (FFT + AI inference + sending serial setpoint $\approx 85\text{ ms} + 5\text{ ms} \approx 90\text{ ms}$). This runs asynchronously at its own natural pace and **never blocks or delays** the 10 ms motor tick.
 
 ---
 
@@ -181,9 +217,10 @@ The board (Arduino UNO Q) is located in Huy's lab. Akash works remotely from a s
 | **P2** | **Phase 2: Linux Baseline Benchmarking & Bring-up (Wk 4-6, Sep 30 - Oct 20) — [Supports M2]** | | | **🚀 Active** |
 | | *Goal: Collect Config A & B results for M2 Progress Report* | | | |
 | P2.1 | Connect to Linux processor (Cortex-A53) via SSH / serial | Huy 🔧 | Yes | |
+| P2.1b | **Investigate IPC link:** Confirm how QRB2210 talks to STM32U585 (UART? SPI? Arduino Bridge/RPC?) and document the serial interface | Huy 🔧 | Yes | |
 | P2.2 | Install `stress-ng`, `build-essential` on board | Huy 🔧 | Yes | |
 | P2.3 | Ingest CWRU bearing vibration dataset (`data/raw/cwru/`) onto board filesystem | Huy 🔧 | Yes | |
-| P2.4 | Write 10 ms periodic C loop (read vibration frame, FFT, log CSV) | Huy 🔧 | Yes | |
+| P2.4 | Write dual-threaded C benchmark for Linux: Thread 1 = 10 ms control tick (`clock_nanosleep`, logs CSV); Thread 2 = ~85 ms analytics loop (FFT, updates setpoint) | Huy 🔧 | Yes | |
 | P2.5 | Run Config A: standard Linux CFS scheduling | Huy 🔧 | Yes | |
 | P2.6 | Run Config B: RT-FIFO scheduling (`sudo chrt -f 90`) | Huy 🔧 | Yes | |
 | P2.7 | Evaluate both under idle and stress (`stress-ng --cpu 4 --vm 1`) | Huy 🔧 | Yes | |
@@ -196,7 +233,7 @@ The board (Arduino UNO Q) is located in Huy's lab. Akash works remotely from a s
 | P3.2 | Train 1D-CNN fault classifier (normal / inner / ball / outer race) | Akash 💻 | No | |
 | P3.3 | Quantize model to TFLite INT8 (`.tflite`) | Akash 💻 | No | |
 | P3.4 | Receive `.tflite` from Akash, deploy to board via `scp`/`sftp` | Huy 🔧 | Yes | |
-| P3.5 | Integrate TFLite C/C++ runtime into control loop (FFT -> inference -> prescription) | Huy 🔧 | Yes | |
+| P3.5 | Integrate TFLite C/C++ runtime into Thread 2 (analytics thread: FFT -> inference -> prescription) | Huy 🔧 | Yes | |
 | | | | | |
 | **P4** | **Phase 4: Zephyr RTOS Bring-up & Real-Time Timer Setup (Wk 5-7, Oct 7 - Oct 27)** | | | |
 | | *Goal: Set up Zephyr toolchain (west + CMake + Ninja) and establish zero-jitter baseline* | | | |
@@ -209,8 +246,8 @@ The board (Arduino UNO Q) is located in Huy's lab. Akash works remotely from a s
 | | | | | |
 | **P5** | **Phase 5: Dual-OS Communication & Live Demo (Wk 7-9, Oct 26 - Nov 10) — [Supports M3]** | | | |
 | | *Goal: Complete Config C and deliver M3 Presentation & Demo* | | | |
-| P5.1 | Write Zephyr-side IPC: read prescription from shared memory, apply in actuation loop | Akash 💻 | No | |
-| P5.2 | Write Linux-side IPC: serialize FFT + TFLite output, write to shared memory | Huy 🔧 | Yes | |
+| P5.1 | Write Zephyr-side IPC: receive prescription over serial (UART/SPI), apply in actuation loop | Akash 💻 | No | |
+| P5.2 | Write Linux-side IPC: serialize FFT + TFLite output, send setpoint over serial to MCU | Huy 🔧 | Yes | |
 | P5.3 | Deploy both sides on board, run end-to-end integration tests | Huy 🔧 | Yes | |
 | P5.4 | Inject `stress-ng` on Linux, verify Zephyr actuation is immune | Huy 🔧 | Yes | |
 | P5.5 | Prepare 25-minute presentation slides (joint slide deck) | Both | - | |
@@ -252,12 +289,12 @@ The project milestones are aligned with the official deadlines established in th
 The project will be considered successful when the following quantitative engineering benchmarks and academic standards are fulfilled:
 
 1. **Benchmark Execution Stability:** All 10,000 continuous control cycles execute reliably to completion without application crash, kernel panic, or buffer overflow across all 9 experimental test runs (3 Configurations $\times$ 3 Stress Levels).
-2. **Quantitative Real-Time Metrics & Thresholds:**
-   - **Nominal Cycle Period ($T_{\text{nom}}$):** Exactly $10.0\text{ ms}$ ($100\text{ Hz}$).
-   - **Deadline Miss Definition:** Any cycle period or turnaround latency exceeding $12.0\text{ ms}$ (a $+20\%$ jitter threshold) is officially flagged as a **Deadline Miss**. Delays $> 50.0\text{ ms}$ are flagged as **Severe System Starvation**.
+2. **Quantitative Real-Time Metrics & Thresholds (Formally Defined in §4.3.1):**
+   - **Nominal Cycle Period ($T_{\text{nom}}$):** Exactly $10.00\text{ ms}$ ($100\text{ Hz}$).
+   - **Deadline Miss Criterion (Strict):** Any observed cycle period exceeding the nominal time budget, **$T_k > 10.00\text{ ms}$**, is officially classified as a **Deadline Miss**. Delays $T_k > 50.00\text{ ms}$ are flagged as **Severe System Starvation**.
    - **Empirical Target KPIs:**
-     - **Configuration C (Dual-OS):** Must achieve a Deadline Miss Ratio of **$\text{DMR} = 0.00\%$** under 100% Linux stress (`stress-ng --cpu 4 --vm 1`), with cycle jitter standard deviation **$\sigma < 0.10\text{ ms}$**, proving absolute temporal isolation.
-     - **Configurations A & B (Linux CFS & `SCHED_FIFO`):** Must capture statistically significant latency degradation under heavy load ($\text{DMR} > 0\%$ and max latency spikes $> 20\text{ ms}$), providing empirical validation of GPOS CPU quota throttling and memory page-fault stalls.
+     - **Configuration C (Dual-OS):** Must achieve a Deadline Miss Ratio of **$\text{DMR} = 0.00\%$** under 100% Linux stress (`stress-ng --cpu 4 --vm 1`), with cycle period jitter standard deviation **$\sigma_J < 0.10\text{ ms}$** and Worst-Case Cycle Latency **$\text{WCL} < 10.50\text{ ms}$**, proving absolute temporal isolation.
+     - **Configurations A & B (Linux CFS & `SCHED_FIFO`):** Must capture statistically significant latency degradation under heavy load ($\text{DMR} > 0\%$ and worst-case spikes $\text{WCL} > 20.00\text{ ms}$), providing empirical validation of GPOS scheduling preemption and memory page-fault stalls.
 3. **Academic Deliverable Standards:**
    - All four course milestones (M1, M2, M3, M4) submitted strictly by the official deadlines.
    - Individual teammate contributions (Huy vs. Akash) clearly documented to satisfy the syllabus peer-evaluation criteria.
@@ -278,3 +315,5 @@ The project will be considered successful when the following quantitative engine
 - **Hardware Corruption / Kernel Crash Risk:** Intensive stress testing (`stress-ng`) and direct hardware register access can cause OS crashes or filesystem corruption.
   - *Mitigation:* A golden backup image of the Debian filesystem is maintained on cloud storage, allowing full board re-flashing within 15 minutes.
 - **Contingency Schedule Buffer:** If dual-OS inter-processor communication setup takes longer than anticipated, Phase 2 (Config A vs Config B on Linux) provides complete, valid comparative operating systems data for Milestone 2 (Oct 20), guaranteeing that the team never misses an academic deadline.
+- **IPC Mechanism Uncertainty:** The exact inter-processor link between the QRB2210 (MPU) and STM32U585 (MCU) has not yet been verified on the physical board. It is expected to be a serial channel (UART or SPI) exposed through Arduino's Bridge/RPC layer, not shared RAM (since the two chips are separate packages). Task P2.1b is specifically allocated to investigate and document this during Phase 2.
+  - *Mitigation:* The IPC protocol is designed as a lightweight "latest-value-wins" single-value serial message, which works identically over UART, SPI, or shared memory. Only the transport driver changes; the application logic and benchmark methodology remain the same regardless of the underlying channel.
