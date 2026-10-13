@@ -22,6 +22,7 @@ ENV/
 # Large raw datasets & temporary logs
 *.csv.bak
 *.log
+data/raw/
 data/raw_large/
 
 # LaTeX compilation auxiliary files
@@ -40,3 +41,7 @@ data/raw_large/
 Thumbs.db
 .vscode/
 .idea/
+
+# Internal working drafts & bringup guides (excluded from remote git tracking)
+docs/Phase2_Linux_Bringup_Guide.md
+docs/Week_04_06_Progress_Notes.md

@@ -1,0 +1,47 @@
+{
+  "sampling_rate_hz": 12000,
+  "window_size": 1024,
+  "window_duration_ms": 85.33333333333333,
+  "classes": {
+    "Normal": {
+      "class_id": 0,
+      "source_file": "97.mat",
+      "total_points": 243938,
+      "num_windows": 238,
+      "prescribed_setpoint_percent": 100,
+      "rpm": 1797,
+      "mean": 0.012558210641145706,
+      "std": 0.07268709689378738
+    },
+    "InnerRaceFault": {
+      "class_id": 1,
+      "source_file": "105.mat",
+      "total_points": 121265,
+      "num_windows": 118,
+      "prescribed_setpoint_percent": 70,
+      "rpm": 1797,
+      "mean": 0.013443559408187866,
+      "std": 0.2912158966064453
+    },
+    "BallFault": {
+      "class_id": 2,
+      "source_file": "118.mat",
+      "total_points": 122571,
+      "num_windows": 119,
+      "prescribed_setpoint_percent": 85,
+      "rpm": 1797,
+      "mean": 0.012607048265635967,
+      "std": 0.13866162300109863
+    },
+    "OuterRaceFault": {
+      "class_id": 3,
+      "source_file": "130.mat",
+      "total_points": 121991,
+      "num_windows": 119,
+      "prescribed_setpoint_percent": 60,
+      "rpm": 1797,
+      "mean": 0.023171475157141685,
+      "std": 0.6691044569015503
+    }
+  }
+}

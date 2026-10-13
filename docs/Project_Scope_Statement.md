@@ -234,16 +234,16 @@ The board (Arduino UNO Q) is located in Huy's lab. Akash works remotely from a s
 | | | | | |
 | **P2** | **Phase 2: Linux Baseline Benchmarking & Bring-up (Wk 4-6, Sep 30 - Oct 20) — [Supports M2]** | | | **🚀 Active** |
 | | *Goal: Collect Config A & B results for M2 Progress Report* | | | |
-| P2.1 | Connect to Linux processor (Cortex-A53) via SSH / serial | Huy 🔧 | Yes | |
-| P2.1b | **Investigate IPC link:** Confirm how QRB2210 talks to STM32U585 (UART? SPI? Arduino Bridge/RPC?) and document the serial interface | Huy 🔧 | Yes | |
-| P2.2 | Install `stress-ng`, `build-essential` on board | Huy 🔧 | Yes | |
-| P2.3 | Ingest CWRU bearing vibration dataset (`data/raw/cwru/`) onto board filesystem | Huy 🔧 | Yes | |
-| P2.4 | Write dual-threaded C benchmark for Linux: Thread 1 = 10 ms control tick (`clock_nanosleep` with `TIMER_ABSTIME`, timestamps buffered in RAM, CSV written after run); Thread 2 = ~85 ms analytics loop (FFT, updates setpoint) | Huy 🔧 | Yes | |
-| P2.5 | Run Config A: standard Linux CFS scheduling | Huy 🔧 | Yes | |
-| P2.6 | Run Config B: RT-FIFO scheduling (`sudo chrt -f 90`) | Huy 🔧 | Yes | |
-| P2.7 | Evaluate both at 0% / 50% / 100% stress (commands in §4.3.3) | Huy 🔧 | Yes | |
-| P2.8 | Write shell scripts for automated stress test scenarios | Akash 💻 | No | |
-| P2.9 | Draft and submit **M2 Progress Report (Due Oct 20)** | Both | - | |
+| P2.1 | Connect to Linux processor (Cortex-A53) via SSH / serial | Huy 🔧 | Yes | ✅ |
+| P2.1b | **Investigate IPC link:** Confirm how QRB2210 talks to STM32U585 (UART? SPI? Arduino Bridge/RPC?) and document the serial interface | Huy 🔧 | Yes | ✅ |
+| P2.2 | Install `stress-ng`, `build-essential` on board | Huy 🔧 | Yes | ✅ |
+| P2.3 | Ingest CWRU bearing vibration dataset (`data/raw/cwru/`) onto board filesystem | Huy 🔧 | Yes | ✅ |
+| P2.4 | Write dual-threaded C benchmark for Linux: Thread 1 = 10 ms control tick (`clock_nanosleep` with `TIMER_ABSTIME`, timestamps buffered in RAM, CSV written after run); Thread 2 = ~85 ms analytics loop (FFT, updates setpoint) | Huy 🔧 | Yes | ✅ |
+| P2.5 | Run Config A: standard Linux CFS scheduling | Huy 🔧 | Yes | ✅ |
+| P2.6 | Run Config B: RT-FIFO scheduling (`sudo chrt -f 90`) | Huy 🔧 | Yes | ✅ |
+| P2.7 | Evaluate both at 0% / 50% / 100% stress (commands in §4.3.3) | Huy 🔧 | Yes | ✅ |
+| P2.8 | Write shell scripts for automated stress test scenarios | Akash / Huy | Yes | ✅ |
+| P2.9 | Draft and submit **M2 Progress Report (Due Oct 20)** | Both | - | ⏳ In-Progress |
 | | | | | |
 | **P3** | **Phase 3: Offline Model Training & Edge Deployment (Wk 4-6, Oct 1 - Oct 20, Parallel Track)** | | | |
 | | *Goal: Train 1D-CNN on CWRU dataset and export TFLite INT8 model* | | | |

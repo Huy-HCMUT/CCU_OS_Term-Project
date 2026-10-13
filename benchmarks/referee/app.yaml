@@ -1,0 +1,8 @@
+name: referee_bench
+description: Hardware Referee Bench
+icon: ⏱️
+profiles:
+  default:
+    platforms:
+      - platform: arduino:zephyr
+default_profile: default
