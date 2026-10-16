@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 #
-# run_all_in_one_experiments.sh - Ultimate All-in-One Industrial Benchmark
+# run_benchmark.sh - Multi-Resource Industrial Benchmark Harness
 # Course: CCU Operating Systems (Fall 2026) - Term Project
 # Author: Quang-Huy Nguyen (Lead) & Akash / An-Rui Peng
 #
 # Combines all advanced industrial stressors (CPU saturation + Flash I/O +
 # Virtual Memory pressure + Core 0 Affinity Contention) across 0%, 50%, and 100%
 # stress tiers for Config A (CFS) vs Config B (SCHED_FIFO 90 + mlock).
+# Telemetry outputs strictly follow the project naming convention: <Config>_<Stress>.csv
 #
 
 set -e
@@ -31,10 +32,10 @@ kill_stress() {
 }
 
 echo "======================================================================"
-echo " CCU OS Term Project: ULTIMATE ALL-IN-ONE INDUSTRIAL BENCHMARK"
+echo " CCU OS Term Project: Industrial Benchmark Harness"
 echo " Platform: Arduino UNO Q (Qualcomm Cortex-A53 Linux MPU)"
 echo " Stress Tiers: 0% (Idle), 50% (Medium Composite), 100% (Maximum Storm)"
-echo " Stress Vectors Combined: CPU + Flash I/O + VM RAM + Core 0 Pinning"
+echo " Stress Vectors: CPU Contention + Flash I/O + VM Memory + Core 0 Pinning"
 echo " Cycles per test: ${CYCLES} ($(( CYCLES / 100 )) seconds)"
 echo "======================================================================"
 
@@ -45,15 +46,15 @@ done
 echo "[Governor] Current CPU0 Frequency: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null || echo 'N/A') kHz"
 
 
-run_all_in_one_test() {
+run_test() {
     local config=$1
     local stress=$2
-    local csv_file="${RAW_OUT_DIR}/all_in_one_config_${config}_stress_${stress}.csv"
+    local csv_file="${RAW_OUT_DIR}/${config}_${stress}.csv"
     local stress_pid=""
 
     echo ""
     echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
-    echo " RUNNING: Config ${config} | All-in-One Stress Level: ${stress}%"
+    echo " RUNNING: Config ${config} | Stress Level: ${stress}%"
     echo " Target Output: ${csv_file}"
     echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
     kill_stress
@@ -106,18 +107,18 @@ run_all_in_one_test() {
 }
 
 # 1. Execute Config A (CFS) across 0%, 50%, 100%
-run_all_in_one_test "A" 0
-run_all_in_one_test "A" 50
-run_all_in_one_test "A" 100
+run_test "A" 0
+run_test "A" 50
+run_test "A" 100
 
 # 2. Execute Config B (SCHED_FIFO 90 + mlock) across 0%, 50%, 100%
-run_all_in_one_test "B" 0
-run_all_in_one_test "B" 50
-run_all_in_one_test "B" 100
+run_test "B" 0
+run_test "B" 50
+run_test "B" 100
 
 echo ""
 echo "======================================================================"
-echo " ALL-IN-ONE BENCHMARK SUITE COMPLETED SUCCESSFULLY!"
+echo " BENCHMARK SUITE COMPLETED SUCCESSFULLY!"
 echo " Raw telemetry CSVs stored in: ${RAW_OUT_DIR}"
 echo "======================================================================"
-ls -lh "${RAW_OUT_DIR}"/all_in_one_*.csv
+ls -lh "${RAW_OUT_DIR}"/[AB]_*.csv

@@ -34,12 +34,12 @@ During Weeks 4–6, physical hardware bring-up and comprehensive operating syste
 | **P2.2** | System Package Installation | Fixed DNS resolution (`/etc/resolv.conf`), granted passwordless `sudo` to user `arduino`, installed `build-essential`, `stress-ng`, and Python. | Board system setup | ✅ Done |
 | **P2.3** | Dataset Ingestion | Downloaded 4 baseline CWRU 0 HP `.mat` files, segmented into 594 windows (1024 samples each), and exported 100 binary test frames. | `data/processed/cwru_test_frames.bin` | ✅ Done |
 | **P2.4** | Dual-Threaded C Benchmark | Built Option 2 normalized dual-threaded C benchmark (`dual_thread_bench.c`, `fft_math.c`) on target Cortex-A53 with `-O2 -pthread -lm`. | `build/dual_thread_bench` | ✅ Done |
-| **P2.5** | Config A (CFS Baseline) | Evaluated standard CFS timeslicing across 0%, 50%, and 100% stress within the unified multi-resource benchmark harness. | `results/raw/all_in_one_config_A_stress_*.csv` | ✅ Done |
-| **P2.6** | Config B (RT-FIFO 90 + `mlockall`) | Evaluated real-time determinism across 0%, 50%, and 100% stress within the unified multi-resource benchmark harness. | `results/raw/all_in_one_config_B_stress_*.csv` | ✅ Done |
-| **P2.7** | Unified Multi-Resource Benchmark Orchestration | Unified industrial stress runner combining Core 0 CPU contention, L2 cache thrashing, eMMC I/O, and VM pressure into a single script. | `benchmarks/run_all_in_one_experiments.sh` | ✅ Done |
-| **P2.8** | Telemetry Parsing & KPIs | Automated extraction of lateness, WCL, tail ($P_{99.9}$), jitter, DMR, and kernel context switches/faults. | `results/parse_all_in_one_metrics.py` | ✅ Done |
-| **P2.9** | Hardware Referee Bench for Config C | Deployed Board 2 as external hardware referee on pin `D2` (160 MHz STM32 EXTI interrupt). Handshake verified (10/10 pulses). | `benchmarks/referee/`, `results/raw/referee_handshake_pulses.csv` | ✅ Done |
-| **P2.10** | Publication Figures & Progress Report | Generated consolidated comparison figure and synthesized comprehensive OS analysis for Milestone 2. | `results/plots/all_in_one_master_comparison.png`, `docs/Week_04_06_Progress_Report.md` | ✅ Done |
+| **P2.5** | Config A (CFS Baseline) | Evaluated standard CFS timeslicing across 0%, 50%, and 100% stress within the unified multi-resource benchmark harness. | `results/raw/A_*.csv` | ✅ Done |
+| **P2.6** | Config B (RT-FIFO 90 + `mlockall`) | Evaluated real-time determinism across 0%, 50%, and 100% stress within the unified multi-resource benchmark harness. | `results/raw/B_*.csv` | ✅ Done |
+| **P2.7** | Unified Multi-Resource Benchmark Orchestration | Unified industrial stress runner combining Core 0 CPU contention, L2 cache thrashing, eMMC I/O, and VM pressure into a single script. | `benchmarks/run_benchmark.sh` | ✅ Done |
+| **P2.8** | Telemetry Parsing & KPIs | Automated extraction of lateness, WCL, tail ($P_{99.9}$), jitter, DMR, and kernel context switches/faults. | `benchmarks/analysis/analyze_latency.py` | ✅ Done |
+| **P2.9** | Hardware Referee Bench for Config C | Deployed Board 2 as external hardware referee on pin `D2` (160 MHz STM32 EXTI interrupt). Handshake verified (10/10 pulses). | `benchmarks/referee/`, `results/raw/C_*.csv` | ✅ Done |
+| **P2.10** | Publication Figures & Progress Report | Generated consolidated comparison figures and synthesized comprehensive OS analysis for Milestone 2. | `results/plots/dmr_vs_tolerance.png`, `docs/Week_04_06_Progress_Report.md` | ✅ Done |
 
 ---
 
@@ -136,9 +136,9 @@ All experiments were executed on physical hardware (**Board 1: Arduino UNO Q Qua
 | **Config B (`SCHED_FIFO` 90 + `mlock`)** | **50% (Composite)** | 0.049 ms | **0.349 ms** | 0.332 ms | 0.036 ms | **0.00%** | **0 / 2,000** | 4 | **0** |
 | **Config B (`SCHED_FIFO` 90 + `mlock`)** | **100% (Storm)** | 0.057 ms | **0.385 ms** | 0.362 ms | 0.034 ms | **0.00%** | **0 / 2,000** | 3 | **0** |
 
-*(Consolidated comparison plot saved to `results/plots/all_in_one_master_comparison.png`; raw telemetry logs archived in `results/raw/all_in_one_*.csv`).*
+*(Consolidated tolerance comparison plot saved to `results/plots/dmr_vs_tolerance.png`; raw telemetry logs archived in `results/raw/[AB]_*.csv`).*
 
-![Unified Benchmark Comparison](../results/plots/all_in_one_master_comparison.png)
+![Unified Benchmark Comparison](../results/plots/dmr_vs_tolerance.png)
 
 ### 5.2 Industrial Precision Tolerance Sensitivity Breakdown ($1.0\text{ ms}$ vs $0.5\text{ ms}$ vs $0.2\text{ ms}$)
 
