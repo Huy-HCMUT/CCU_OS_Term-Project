@@ -9,6 +9,8 @@ volatile uint32_t g_deltas_us[MAX_RECORDS];
 volatile uint32_t g_expected_count = 10000;
 volatile bool g_recording = false;
 
+volatile uint32_t g_last_pulse_ms = 0;
+
 void on_pulse_d2() {
     // Read 160 MHz hardware cycle counter directly to eliminate 26.84s micros() rollover artifact
     uint32_t now_cyc = k_cycle_get_32();
@@ -20,6 +22,7 @@ void on_pulse_d2() {
     // Unsigned 32-bit subtraction natively handles 2^32 cycle rollover
     uint32_t delta_cyc = now_cyc - g_last_pulse_cyc;
     g_last_pulse_cyc = now_cyc;
+    g_last_pulse_ms = millis();
     
     // Convert 160 MHz cycles to microseconds
     uint32_t delta_us = delta_cyc / 160;
@@ -37,6 +40,7 @@ int rpc_start_capture(int expected_count) {
     g_expected_count = (expected_count > 0) ? (uint32_t)expected_count : 10000;
     g_pulse_count = 0;
     g_last_pulse_cyc = k_cycle_get_32();
+    g_last_pulse_ms = millis();
     g_recording = true;
     return 1;
 }
@@ -85,7 +89,14 @@ void setup() {
 
 void loop() {
     // Suppress Bridge.update() during active pulse capture to eliminate serial irq_lock() noise!
-    // Resume only after capture finishes or if pulse train has been idle for > 500 ms (timeout recovery)
+    // Auto-resume Bridge if pulse train has been idle for > 2000 ms (timeout recovery)
+    if (g_recording && g_pulse_count > 0) {
+        uint32_t last = g_last_pulse_ms;
+        uint32_t now = millis();
+        if (now > last && (now - last) > 2000) {
+            g_recording = false;
+        }
+    }
     if (!g_recording) {
         Bridge.update();
     }

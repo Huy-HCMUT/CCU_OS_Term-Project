@@ -17,7 +17,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BIN_PATH="${ROOT_DIR}/mpu_linux/build/dual_thread_bench"
 RAW_OUT_DIR="${ROOT_DIR}/results/raw"
 DATA_BIN="${ROOT_DIR}/data/processed/cwru_test_frames.bin"
-CYCLES=${1:-2000}
+CYCLES=${1:-10000}
 
 mkdir -p "${RAW_OUT_DIR}"
 

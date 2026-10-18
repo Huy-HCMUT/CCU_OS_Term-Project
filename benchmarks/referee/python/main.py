@@ -6,6 +6,17 @@ from arduino.app_utils import App, Bridge
 CMD_FILE = "/tmp/referee_cmd"
 STATUS_FILE = "/tmp/referee_status"
 
+def safe_bridge_call(method, *args, retries=5, delay=0.5):
+    last_err = None
+    for attempt in range(retries):
+        try:
+            return Bridge.call(method, *args)
+        except Exception as e:
+            last_err = e
+            print(f"[Referee] Bridge.call('{method}') attempt {attempt+1}/{retries} failed: {e}")
+            time.sleep(delay)
+    raise last_err
+
 def check_commands():
     if not os.path.exists(CMD_FILE):
         return
@@ -26,31 +37,44 @@ def check_commands():
     if cmd == "START":
         count = int(parts[1]) if len(parts) > 1 else 10000
         print(f"[Referee] Starting capture for {count} pulses...")
-        ret = Bridge.call("start_capture", count)
-        with open(STATUS_FILE, "w") as f:
-            f.write(f"RECORDING 0 {count}\n")
-        print(f"[Referee] Capture started (Bridge returned {ret})")
+        try:
+            ret = safe_bridge_call("start_capture", count)
+            with open(STATUS_FILE, "w") as f:
+                f.write(f"RECORDING 0 {count}\n")
+            print(f"[Referee] Capture started (Bridge returned {ret})")
+        except Exception as e:
+            print(f"[Referee] Failed to start capture: {e}")
+            with open(STATUS_FILE, "w") as f:
+                f.write(f"ERROR {e}\n")
 
     elif cmd == "STOP":
         out_csv = parts[1] if len(parts) > 1 else "/home/arduino/referee_results.csv"
         print(f"[Referee] Stopping capture, outputting to {out_csv}...")
-        total = Bridge.call("stop_capture", 0)
+        try:
+            total = safe_bridge_call("stop_capture", 0)
+        except Exception as e:
+            print(f"[Referee] Error stopping capture: {e}")
+            total = 0
+
         print(f"[Referee] Total pulses recorded: {total}")
 
         # Fetch recorded deltas using chunked API (50 per call)
         deltas = []
         offset = 0
         while offset < total:
-            chunk_str = Bridge.call("get_deltas_chunk", offset)
-            if chunk_str:
-                items = [int(x) for x in chunk_str.split(",") if x.strip()]
-                deltas.extend(items)
-                offset += len(items)
-            else:
-                # Fallback to individual fetch if needed
-                d = Bridge.call("get_delta_at", offset)
-                deltas.append(d)
-                offset += 1
+            try:
+                chunk_str = safe_bridge_call("get_deltas_chunk", offset, retries=3, delay=0.2)
+                if chunk_str:
+                    items = [int(x) for x in chunk_str.split(",") if x.strip()]
+                    deltas.extend(items)
+                    offset += len(items)
+                else:
+                    d = safe_bridge_call("get_delta_at", offset, retries=3, delay=0.2)
+                    deltas.append(d)
+                    offset += 1
+            except Exception as e:
+                print(f"[Referee] Chunk fetch error at offset {offset}: {e}")
+                break
 
         with open(out_csv, "w", newline="") as f:
             writer = csv.writer(f)
@@ -66,13 +90,19 @@ def check_commands():
         print(f"[Referee] Saved {len(deltas)} records to {out_csv}")
 
     elif cmd == "STATUS":
-        cur = Bridge.call("get_count", 0)
-        with open(STATUS_FILE, "w") as f:
-            f.write(f"COUNT {cur}\n")
-        print(f"[Referee] Current count: {cur}")
+        try:
+            cur = safe_bridge_call("get_count", 0, retries=2, delay=0.2)
+            with open(STATUS_FILE, "w") as f:
+                f.write(f"COUNT {cur}\n")
+            print(f"[Referee] Current count: {cur}")
+        except Exception as e:
+            print(f"[Referee] Status error: {e}")
 
 def loop():
-    check_commands()
+    try:
+        check_commands()
+    except Exception as e:
+        print(f"[Referee] Exception in loop: {e}")
     time.sleep(0.05)
 
 print("[Referee] Service initialized. Listening on /tmp/referee_cmd...")

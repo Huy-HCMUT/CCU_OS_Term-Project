@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <Arduino_RouterBridge.h>
 
-#define MAX_SAMPLES 2048
+#define MAX_SAMPLES 10240
 
 struct PinEntry { const char* name; uint8_t pin; };
 
