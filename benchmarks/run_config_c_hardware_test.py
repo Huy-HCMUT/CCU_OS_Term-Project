@@ -147,7 +147,7 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None):
     print(f"      Saved Referee records to {local_ref_csv.name}")
 
     # 5C. Save standardized files for analyze_latency.py: C_{stress}_dwt.csv and C_{stress}_referee.csv
-    if stress_pct in (0, 50, 100):
+    if tag == str(stress_pct):
         std_dwt_csv = raw_dir / f"C_{stress_pct}_dwt.csv"
         with open(std_dwt_csv, "w", newline="") as f:
             writer = csv.writer(f)
