@@ -61,7 +61,7 @@ CONFIG_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100",
 CONFIG_LABELS = {
     "A": "A · Linux CFS",
     "B": "B · Linux SCHED_FIFO",
-    "C": "C · Zephyr (dual-OS)",
+    "C": "C · Zephyr baseline (no IPC)",
 }
 SURFACE = "#ffffff"
 TEXT_PRIMARY = "#0b0b0b"
