@@ -120,8 +120,8 @@ To ensure statistical significance, eliminate transient initialization anomalies
    - **Kernel Background Events:** The $100\text{-second}$ window is critical because Linux dirty page flush cycles (`dirty_writeback_centisecs`) trigger every 5–30 seconds; 10,000 cycles ensure that background kernel flush spikes are fully captured in tail latency ($p99.9$ and $p99.99$).
 2. **Stress Schedulers & Stabilization Lead Time:**
    - For every stressed trial (50% and 100%), background `stress-ng` worker processes were initialized with a mandatory **$3.0\text{-second}$ pre-run stabilization window** before starting timer telemetry. This ensured that thread creation overhead, file allocation on eMMC, and memory page population reached full steady-state saturation prior to timing acquisition.
-3. **Thermal Equilibrium & Inter-Test Cooldown:**
-   - Between consecutive experimental runs, a mandatory **$5.0\text{-second}$ idle rest interval** was enforced with active background worker purging (`sudo pkill -9 stress-ng`), ensuring cores returned to thermal baseline ($< 48^\circ\text{C}$) to eliminate thermal throttling anomalies.
+3. **Inter-Test Cooldown:**
+   - Between consecutive experimental runs, a mandatory **$5.0\text{-second}$ idle rest interval** was enforced with active background worker purging (`sudo pkill -9 stress-ng`), to let the cores cool between runs and reduce the risk of thermal throttling. SoC temperature was not logged during the runs.
 4. **Hardware Clock & Environmental Controls:**
    - All 4 Cortex-A53 cores were locked to the **`performance` governor at $2.016\text{ GHz}$**, eliminating dynamic voltage/frequency scaling (DVFS) transition penalties.
    - Telemetry timestamps were captured directly via `clock_gettime(CLOCK_MONOTONIC)` into pre-allocated memory buffers (`RAM`), with disk I/O to eMMC deferred until after test completion to eliminate observer effects.
@@ -201,9 +201,9 @@ The following IEEE-formatted figures illustrate the empirical distributions acro
 - Config B calls `mlockall(MCL_CURRENT | MCL_FUTURE)` and prefaults the telemetry buffer at startup, so its pages stay in physical RAM.
 - In the main matrix, the process-wide `ru_minflt` count was 1–2 for both Config A and Config B, so these runs show no page-fault difference between them. Test 4 (`test4_memory_no_mlock.csv` vs. `test4_memory_with_mlock.csv`) is the experiment that isolates the effect of memory locking.
 
-### 6.4 CPU Scaling Hardening: Eliminating DVFS & C-State Jitter
-- Under the default Linux `schedutil` governor, the kernel dynamically throttles CPU frequency (down to 1.3 GHz) and allows idle C-states during partial load, causing sporadic wake-up jitter.
-- By permanently locking all 4 Cortex-A53 cores to the **`performance` governor at 2.016 GHz**, DVFS transition latency was eliminated. Both 50% and 100% stress tiers now operate under identical peak clock frequencies, ensuring purely monotonic, workload-driven evaluation.
+### 6.4 CPU Frequency Control (Design Choice)
+- Under the default `schedutil` governor, the kernel changes CPU frequency with load (e.g. to lower operating points such as 1.3 GHz on this chip), and each frequency change can add wake-up delay.
+- To remove this variable, the harness locks all 4 Cortex-A53 cores to the **`performance` governor at 2.016 GHz** before every run, so all stress tiers run at the same clock frequency. This is a design choice, not a measured result: no runs were made under `schedutil`, so its effect on lateness was not quantified here. The governor does not control CPU idle states (cpuidle), so idle-state exit latency may still contribute to jitter.
 
 ### 6.5 The 200–300 µs Jitter Floor of Stock Linux
 - While `SCHED_FIFO` achieved 0.00% DMR under the coarse 1.0 ms tolerance, evaluating it at a high-precision industrial threshold ($200\text{ }\mu\text{s} = 0.20\text{ ms}$) revealed **155–194 deadline misses (~1.5–1.9% DMR)**.
