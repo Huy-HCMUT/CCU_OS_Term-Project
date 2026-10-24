@@ -209,9 +209,9 @@ All timing is measured against an **absolute schedule**: cycle $k$ has release t
    - Latency distribution graphs (box plots and Cumulative Distribution Function curves) comparing the three configurations.
 3. **Course Deliverables & Academic Reports:**
    - **Milestone 1 (Sep 29):** 2-Page Project Proposal & Abstract + 5-10 min in-class presentation. ✅ **COMPLETED**
-   - **Milestone 2 (Oct 20):** Formal Written Progress Report describing environment setup and preliminary tests. ⏳ **Upcoming**
-   - **Milestone 3 (Nov 10):** 25-Minute In-Class Presentation and live/recorded demo. ⏳ **Upcoming**
-   - **Milestone 4 (Dec 29):** Final Written Report (up to 15 pages in IEEE format), codebase, and role breakdown. ⏳ **Upcoming**
+   - **Milestone 2 (Oct 27, moved from Oct 20):** Formal Written Progress Report describing environment setup and preliminary tests. ⏳ **Upcoming**
+   - **Milestone 3 (Nov 17, moved from Nov 10):** 25-Minute In-Class Presentation and live/recorded demo. ⏳ **Upcoming**
+   - **Milestone 4 (Jan 5, 2027, moved from Dec 29):** Final Written Report (up to 15 pages in IEEE format), codebase, and role breakdown. ⏳ **Upcoming**
 
 ### 6. High-Level Work Breakdown Structure (High-Level WBS)
 
@@ -243,7 +243,7 @@ The board (Arduino UNO Q) is located in Huy's lab. Akash works remotely from a s
 | P2.6 | Run Config B: RT-FIFO scheduling (`sudo chrt -f 90`) | Huy 🔧 | Yes | ✅ |
 | P2.7 | Evaluate both at 0% / 50% / 100% stress (commands in §4.3.3) | Huy 🔧 | Yes | ✅ |
 | P2.8 | Write shell scripts for automated stress test scenarios | Akash / Huy | Yes | ✅ |
-| P2.9 | Draft and submit **M2 Progress Report (Due Oct 20)** | Both | - | ⏳ In-Progress |
+| P2.9 | Draft and submit **M2 Progress Report (Due Oct 27)** | Both | - | ⏳ In-Progress |
 | | | | | |
 | **P3** | **Phase 3: Offline Model Training & Edge Deployment (Wk 4-6, Oct 1 - Oct 20, Parallel Track)** | | | |
 | | *Goal: Train 1D-CNN on CWRU dataset and export TFLite INT8 model* | | | |
@@ -269,7 +269,7 @@ The board (Arduino UNO Q) is located in Huy's lab. Akash works remotely from a s
 | P5.3 | Deploy both sides on board, run end-to-end integration tests | Huy 🔧 | Yes | |
 | P5.4 | Inject `stress-ng` on Linux, verify Zephyr actuation is immune | Huy 🔧 | Yes | |
 | P5.5 | Prepare 25-minute presentation slides (joint slide deck) | Both | - | |
-| P5.6 | Co-present and demo for **M3 (Due Nov 10)** | Both | Yes | |
+| P5.6 | Co-present and demo for **M3 (Due Nov 17)** | Both | Yes | |
 | | | | | |
 | **P6** | **Phase 6: Full-Scale Benchmarking & Statistical Evaluation (Wk 10-12, Nov 11 - Dec 6)** | | | |
 | | *Goal: Collect 10,000-cycle datasets across 9 test matrices for M4* | | | |
@@ -283,9 +283,9 @@ The board (Arduino UNO Q) is located in Huy's lab. Akash works remotely from a s
 | P7.2 | Write sections: model design, Zephyr RTOS theory, statistical analysis, conclusions | Akash 💻 | No | |
 | P7.3 | Cross-review each other's sections and unify writing style | Both | - | |
 | P7.4 | Clean and document code repository with test scripts and reproduction steps | Both | - | |
-| P7.5 | Document individual contributions, submit final package **M4 (Due Dec 29)** | Both | - | |
+| P7.5 | Document individual contributions, submit final package **M4 (Due Jan 5, 2027)** | Both | - | |
 
-> *Risk Mitigation Note: Because Phase 2 (Config A vs Config B) produces valid comparative OS data by Oct 20 (M2), the project already has tangible academic deliverables even while Zephyr/IPC integration is underway for M3.*
+> *Risk Mitigation Note: Because Phase 2 (Config A vs Config B) produces valid comparative OS data by Oct 27 (M2), the project already has tangible academic deliverables even while Zephyr/IPC integration is underway for M3.*
 
 ---
 
@@ -296,9 +296,9 @@ The project milestones are aligned with the official deadlines established in th
 | Milestone | Target Date | Status | Time Window | Contributing WBS Phases | Description & Major Deliverables | Primary Focus |
 | :---: | :---: | :---: | :---: | :---: | :--- | :--- |
 | **M1** | **Sep 29** | ✅ **COMPLETED** | Weeks 1 - 3 | **Phase 1 (P1)** | **Project Proposal & Abstract:** Submitted 2-page proposal and presented in class. | Problem definition, scope, and dual-OS concept |
-| **M2** | **Oct 20** | ⏳ **UPCOMING** | Weeks 4 - 6 | **Phase 2 (P2) & Phase 3 (P3)** | **Progress Report:** Submit formal written report detailing setup and preliminary results. | Platform bring-up, baseline benchmarks (Config A & B), and offline model |
-| **M3** | **Nov 10** | ⏳ **UPCOMING** | Weeks 7 - 9 | **Phase 4 (P4) & Phase 5 (P5)** | **Class Presentation & Demo:** Deliver 25-minute presentation and live/recorded demo. | Dual-OS integration (Config C), model inference, and stress evaluation |
-| **M4** | **Dec 29** | ⏳ **FINAL** | Weeks 10 - 16 | **Phase 6 (P6) & Phase 7 (P7)** | **Final Report Due:** Submit complete 15-page report in IEEE format, code repository, and roles. | In-depth OS analysis, complete 10k-cycle data, and documentation |
+| **M2** | **Oct 27** | ⏳ **UPCOMING** | Weeks 4 - 6 | **Phase 2 (P2) & Phase 3 (P3)** | **Progress Report:** Submit formal written report detailing setup and preliminary results. | Platform bring-up, baseline benchmarks (Config A & B), and offline model |
+| **M3** | **Nov 17** | ⏳ **UPCOMING** | Weeks 7 - 9 | **Phase 4 (P4) & Phase 5 (P5)** | **Class Presentation & Demo:** Deliver 25-minute presentation and live/recorded demo. | Dual-OS integration (Config C), model inference, and stress evaluation |
+| **M4** | **Jan 5, 2027** | ⏳ **FINAL** | Weeks 10 - 16 | **Phase 6 (P6) & Phase 7 (P7)** | **Final Report Due:** Submit complete 15-page report in IEEE format, code repository, and roles. | In-depth OS analysis, complete 10k-cycle data, and documentation |
 
 ---
 
@@ -332,6 +332,6 @@ The project will be considered successful when the following quantitative engine
   - *Mitigation:* Akash utilizes Zephyr's host emulator (`native_sim`, via WSL) and QEMU (`mps2/an521`) to write, build, and test Zephyr application logic locally before passing compiled binaries to Huy for hardware deployment.
 - **Hardware Corruption / Kernel Crash Risk:** Intensive stress testing (`stress-ng`) and direct hardware register access can cause OS crashes or filesystem corruption.
   - *Mitigation:* A golden backup image of the Debian filesystem is maintained on cloud storage, allowing full board re-flashing within 15 minutes.
-- **Contingency Schedule Buffer:** If dual-OS inter-processor communication setup takes longer than anticipated, Phase 2 (Config A vs Config B on Linux) provides complete, valid comparative operating systems data for Milestone 2 (Oct 20), guaranteeing that the team never misses an academic deadline.
+- **Contingency Schedule Buffer:** If dual-OS inter-processor communication setup takes longer than anticipated, Phase 2 (Config A vs Config B on Linux) provides complete, valid comparative operating systems data for Milestone 2 (Oct 27), guaranteeing that the team never misses an academic deadline.
 - **IPC Mechanism Uncertainty:** The exact inter-processor link between the QRB2210 (MPU) and STM32U585 (MCU) has not yet been verified on the physical board. It is expected to be a serial channel (UART or SPI) exposed through Arduino's Bridge/RPC layer, not shared RAM (since the two chips are separate packages). Task P2.1b is specifically allocated to investigate and document this during Phase 2.
   - *Mitigation:* The IPC protocol is designed as a lightweight "latest-value-wins" single-value serial message, which works identically over UART, SPI, or shared memory. Only the transport driver changes; the application logic and benchmark methodology remain the same regardless of the underlying channel.

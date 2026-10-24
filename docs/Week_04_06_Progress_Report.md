@@ -4,7 +4,7 @@
 **Author / Lab Lead:** Quang-Huy Nguyen  
 **Sprint Window:** Weeks 4–6 (Sep 30 – Oct 20, 2026)  
 **Execution Date:** October 10–18, 2026  
-**Target Milestone:** Milestone 2: Formal Written Progress Report (Due Oct 20, 2026)
+**Target Milestone:** Milestone 2: Formal Written Progress Report (Due Oct 27, 2026; moved from Oct 20)
 
 ---
 
@@ -12,7 +12,7 @@
 
 During Weeks 4–6, physical hardware bring-up, asymmetric dual-threaded benchmarking, and high-precision dual-perspective real-time metrology were executed on the **Arduino UNO Q** platform. All objectives assigned to Huy under **Phase 2 (Tasks P2.1 – P2.10)** in the Project Scope Statement were successfully achieved ahead of the Milestone 2 deadline.
 
-To achieve peer-review-grade statistical significance and capture tail latencies up to $p99.99$ as well as kernel background flush events (`dirty_writeback_centisecs`), all experimental trials were scaled to **$10,000\text{ continuous cycles}$ ($100.0\text{ seconds}$ unbroken execution per trial)** across Configurations A and B and the **Config C baseline (no IPC)**, each at 0%, 50%, and 100% stress (9 runs), logging a total of **$90,000\text{ cycles}$ from live physical hardware**. The Linux→MCU IPC path of the full Config C is scheduled for Phase 5.
+To capture tail latencies ($p99.9$ and the maximum) as well as kernel background flush events (`dirty_writeback_centisecs`), all experimental trials were scaled to **$10,000\text{ continuous cycles}$ ($100.0\text{ seconds}$ unbroken execution per trial)** across Configurations A and B and the **Config C baseline (no IPC)**, each at 0%, 50%, and 100% stress (9 runs), logging a total of **$90,000\text{ cycles}$ from live physical hardware**. The Linux→MCU IPC path of the full Config C is scheduled for Phase 5.
 
 ### Key Milestones Achieved:
 1. **Physical Board Bring-Up & Dual-Threaded Architecture:**  
@@ -20,11 +20,11 @@ To achieve peer-review-grade statistical significance and capture tail latencies
 2. **Comprehensive Multi-Resource Industrial Benchmark (10,000 Cycles / Tier):**  
    Executed a unified industrial stress suite combining multi-worker CPU compute saturation, eMMC flash I/O, virtual memory paging pressure, and Core 0 affinity contention across 0% (Idle), 50% (Standard Load), and 100% (Maximum Storm) tiers.
 3. **Decisive Empirical Contrast Across 3 OS Architectures:**  
-   - **Config A (Standard Linux CFS):** Suffered severe real-time collapse under storm contention, with tail lateness $p99.9$ reaching **4.700 ms**, worst-case lateness exploding to **6.120 ms** ($> 6\times$ deadline), and deadline misses surging to **13.91% DMR (1,391 / 10,000 misses)** under the 1.0 ms industrial threshold. Under tight 0.2 ms tolerance, **96.93%** of cycles missed the deadline even when completely idle.
+   - **Config A (Standard Linux CFS):** Broke down under load, with tail lateness $p99.9$ reaching **4.700 ms** at 100% stress and worst-case lateness of **6.120 ms** at 50% stress ($> 6\times$ the 1.0 ms tolerance; 5.805 ms at 100%), and deadline misses surging to **13.91% DMR (1,391 / 10,000 misses)** under the 1.0 ms industrial threshold. Under tight 0.2 ms tolerance, **96.93%** of cycles missed the deadline even when idle; idle is slower than loaded on Linux (§6.5).
    - **Config B (Linux `SCHED_FIFO` 90 + `mlockall`):** Bounded peak lateness to **0.865 ms** with strictly **0.00% DMR (0 / 30,000 misses)** across all stress tiers under the 1.0 ms threshold.
    - **Config C baseline (Zephyr-based MCU loop on the STM32, no IPC yet):** Mean lateness of **2.29–5.70 µs**, worst-case lateness of at most **49.08 µs**, and **0.00% DMR** under both 1.0 ms and 0.2 ms tolerances, even while the Linux MPU ran the 100% storm. Linux stress still raised the MCU's worst case about 5× (10.3 → 49.1 µs), so isolation is strong but not total. No setpoints crossed the Linux→MCU link during these runs; that is Phase 5.
 4. **Dual-Perspective Hardware Referee Metrology:**  
-   Configured a second physical Arduino UNO Q as an independent **Hardware Referee** running a dedicated 160 MHz STM32 EXTI interrupt service routine on pin D2. Captured 10,000 physical pulses per stress tier with zero missed pulses. The referee's period measurements agree with the internal DWT timestamps after accounting for a constant ≈390 ppm offset between the two boards' clocks (§7.3).
+   Configured a second physical Arduino UNO Q as an independent **Hardware Referee** running a dedicated 160 MHz STM32 EXTI interrupt service routine on pin D2. Captured 10,000 physical pulses per stress tier with zero missed pulses. The referee's period measurements agree with the internal DWT timestamps after accounting for a constant ≈390 ppm offset (§7.3). Part of that offset may be the referee's own Zephyr counter losing time while idle, since it timestamps with `k_cycle_get_32()`.
 
 ---
 
@@ -117,7 +117,7 @@ To ensure statistical significance, eliminate transient initialization anomalies
 
 1. **Repetitions & Sample Sizes per Trial:**
    - **Full Industrial Matrix:** Each experimental condition was evaluated across **$N = 10,000\text{ consecutive cycles}$** ($100.0\text{ seconds}$ unbroken continuous run at $10.0\text{ ms}$ tick cadence). Across the 9 primary runs (Configs A and B and the Config C baseline without IPC, $\times$ 3 stress tiers), a total of **$90,000\text{ discrete actuation cycles}$** were logged from live physical hardware.
-   - **Kernel Background Events:** The $100\text{-second}$ window is critical because Linux dirty page flush cycles (`dirty_writeback_centisecs`) trigger every 5–30 seconds; 10,000 cycles ensure that background kernel flush spikes are fully captured in tail latency ($p99.9$ and $p99.99$).
+   - **Kernel Background Events:** The $100\text{-second}$ window is critical because Linux dirty page flush cycles (`dirty_writeback_centisecs`) trigger every 5–30 seconds; 10,000 cycles ensure that background kernel flush spikes are captured in the tail ($p99.9$ and the maximum; with 10,000 samples, $p99.99$ is just the single worst cycle).
 2. **Stress Schedulers & Stabilization Lead Time:**
    - For every stressed trial (50% and 100%), background `stress-ng` worker processes were initialized with a mandatory **$3.0\text{-second}$ pre-run stabilization window** before starting timer telemetry. This ensured that thread creation overhead, file allocation on eMMC, and memory page population reached full steady-state saturation prior to timing acquisition.
 3. **Inter-Test Cooldown:**
@@ -146,7 +146,7 @@ All experiments were executed on physical hardware (**Arduino UNO Q Qualcomm Cor
 | **Config C baseline (no IPC)** | **50% (Composite)** | 0.005 ms | **0.045 ms** | 0.044 ms | 0.012 ms | **0.00%** | **0 / 10,000** | n/a | n/a |
 | **Config C baseline (no IPC)** | **100% (Storm)** | 0.006 ms | **0.049 ms** | 0.049 ms | 0.013 ms | **0.00%** | **0 / 10,000** | n/a | n/a |
 
-*(Statistical post-processing generated via `benchmarks/analysis/analyze_latency.py`; summary table archived in `results/summary.md`; raw telemetry logs archived in `results/raw/[ABC]_*.csv`). `ru_nivcsw` and `ru_minflt` are process-wide counts (`getrusage(RUSAGE_SELF)`) covering both threads, not Thread 1 alone; they do not exist on the MCU and were not measured for Config C.*
+*(Statistical post-processing generated via `benchmarks/analysis/analyze_latency.py`; summary table archived in `results/summary.md`; raw telemetry logs archived in `results/raw/[ABC]_*.csv`). `ru_nivcsw` and `ru_minflt` are process-wide counts (`getrusage(RUSAGE_SELF)`) covering both threads, not Thread 1 alone; they do not exist on the MCU and were not measured for Config C. Config C lateness is measured from the DWT counter after fitting the period, relative to its best cycle, so it is a lower bound; Linux lateness is against the real schedule. Compare jitter, WCL and DMR across platforms, not mean lateness.*
 
 ### 5.2 Industrial Precision Tolerance Sensitivity Breakdown ($1.0\text{ ms}$ vs $0.5\text{ ms}$ vs $0.2\text{ ms}$)
 
@@ -199,7 +199,7 @@ The following IEEE-formatted figures illustrate the empirical distributions acro
 ### 6.3 Virtual Memory Locking (`mlockall`)
 - In Linux, default dynamic memory allocation (`malloc`) uses demand paging: physical RAM pages are only allocated on first write, triggering a **Minor Page Fault (`ru_minflt`)**.
 - Config B calls `mlockall(MCL_CURRENT | MCL_FUTURE)` and prefaults the telemetry buffer at startup, so its pages stay in physical RAM.
-- In the main matrix, the process-wide `ru_minflt` count was 1–2 for both Config A and Config B, so these runs show no page-fault difference between them. Test 4 (`test4_memory_no_mlock.csv` vs. `test4_memory_with_mlock.csv`) is the experiment that isolates the effect of memory locking.
+- In the main matrix, the process-wide `ru_minflt` count was 1–2 for both Config A and Config B, so these runs show no page-fault difference between them. Test 4 (`test4_memory_no_mlock.csv` vs. `test4_memory_with_mlock.csv`) is meant to isolate the effect of memory locking, but it points the wrong way: mean lateness is 413 µs with `mlockall` and 208 µs without (81% vs. 46% of cycles over 0.2 ms). Until the setup is rechecked, Test 4 should not be cited as evidence for `mlockall`.
 
 ### 6.4 CPU Frequency Control (Design Choice)
 - Under the default `schedutil` governor, the kernel changes CPU frequency with load (e.g. to lower operating points such as 1.3 GHz on this chip), and each frequency change can add wake-up delay.
@@ -207,7 +207,8 @@ The following IEEE-formatted figures illustrate the empirical distributions acro
 
 ### 6.5 The 200–300 µs Jitter Floor of Stock Linux
 - While `SCHED_FIFO` achieved 0.00% DMR under the coarse 1.0 ms tolerance, evaluating it at a high-precision industrial threshold ($200\text{ }\mu\text{s} = 0.20\text{ ms}$) revealed **155–194 deadline misses (~1.5–1.9% DMR)**.
-- **Likely causes (not traced in these runs):** the stock kernel (`PREEMPT`, not `PREEMPT_RT`) has non-preemptible sections such as driver spinlocks and interrupt-disabled regions (`local_irq_disable`), plus shared L2 cache contention, none of which `SCHED_FIFO` can bypass. Confirming this would need kernel tracing (e.g. `ftrace`).
+- **Idle is slower than loaded:** median lateness at 0% stress is 224 µs (Config A) and 171 µs (Config B), against 44 µs for Config B at 50% and 35–40 µs in Tests 3 and 5 at 100%. The likely cause is wake-up from deep CPU idle states when nothing keeps the core busy (see §6.4); this is not yet tested. A rerun of Config B at 0% with deep idle states disabled (e.g. holding `/dev/cpu_dma_latency` at 0) would check it. This also accounts for Config A's 96.93% DMR at 0.2 ms when idle.
+- **Likely causes under load (not traced in these runs):** the stock kernel (`PREEMPT`, not `PREEMPT_RT`) has non-preemptible sections such as driver spinlocks and interrupt-disabled regions (`local_irq_disable`), plus shared L2 cache contention, none of which `SCHED_FIFO` can bypass. Confirming this would need kernel tracing (e.g. `ftrace`).
 - **Conclusion:** on this stock kernel, `SCHED_FIFO` meets a 1.0 ms tolerance but not a 0.2 ms one. A `PREEMPT_RT` kernel was not tested and might narrow this gap.
 
 ---
@@ -238,9 +239,9 @@ a dual-perspective measurement methodology was deployed using a second physical 
 
 ### 7.1 Methodological Framework: Why Both DWT and Referee Are Mandatory
 1. **The Internal Perspective (`DWT->CYCCNT` on Board 1):**  
-   Reads the ARM Cortex-M33 Data Watchpoint and Trace hardware cycle register at $160\text{ MHz}$ ($6.25\text{ ns}$ resolution) in a single assembly instruction (`LDR`). This measures **genuine RTOS task scheduling lateness** without I/O bus latency, providing direct methodological parity with Linux `clock_gettime(CLOCK_MONOTONIC)` in Configs A and B.
+   Reads the ARM Cortex-M33 Data Watchpoint and Trace hardware cycle register at $160\text{ MHz}$ ($6.25\text{ ns}$ resolution) in a single assembly instruction (`LDR`). This measures RTOS task scheduling lateness without I/O bus latency. It is not directly comparable to the Linux numbers: Config C lateness is relative to the best cycle after fitting the period (§5.1 note), so compare jitter, WCL and DMR rather than mean lateness.
 2. **The External Perspective (Hardware Referee on Board 2):**  
-   Captures physical voltage transitions on pin `D2` using a dedicated interrupt (`EXTI3` configured at highest NVIC priority 0). Being a separate board with its own clock, it gives an independent view of when the pulses physically appear on the pin. Its oscillator is not calibrated either, so its measurements are relative to its own clock, not to true time.
+   Captures physical voltage transitions on pin `D2` using a dedicated interrupt (`EXTI3` configured at highest NVIC priority 0). Being a separate board with its own clock, it gives an independent view of when the pulses physically appear on the pin. Its oscillator is not calibrated either, so its measurements are relative to its own clock, not to true time. It timestamps edges with `k_cycle_get_32()`, Zephyr's cycle count, which the clock diagnostics show losing about 508 ppm while the chip sleeps; the referee sleeps between edges. It also logs whole microseconds, so it cannot confirm microsecond-level jitter. Moving the referee to DWT timestamps is a next step.
 3. **Mutual Validation (Cross-Correlation):**  
    DWT counts the DUT's CPU clock; the referee counts its own board's clock and adds its own interrupt latency. Comparing the two separates timing effects on the DUT from differences between the two boards' clocks (see §7.3).
 
@@ -256,14 +257,14 @@ The physical cross-validation benchmark was conducted across systematic hardware
 | Telemetry Metric | Config C Baseline (0% Stress) | Config C 50% Composite Load | Config C Storm (100% Linux Load) | Empirical Insight & Verification |
 | :--- | :---: | :---: | :---: | :--- |
 | **Internal DWT Mean Period** | $10.0055\text{ ms}$ | $10.0055\text{ ms}$ | $10.0055\text{ ms}$ | Same in every tier: 1,600,873 cycles (10,005.455 µs, +545.5 ppm vs. 10 ms). The loop is scheduled with `micros()`, and Zephyr's timekeeping drops cycles relative to DWT (≈508 ppm while asleep; clock diagnostics, 2026-10-19), so the loop really ran ≈10.0055 ms per cycle. About half of the 545 ppm is not yet explained. Jitter and WCL are unaffected (computed after fitting the period). |
-| **Internal DWT Mean Lateness** | **$2.291\text{ }\mu\text{s}$** | **$5.401\text{ }\mu\text{s}$** | **$5.702\text{ }\mu\text{s}$** | Sub-microsecond task dispatch determinism on Cortex-M33. |
+| **Internal DWT Mean Lateness** | **$2.291\text{ }\mu\text{s}$** | **$5.401\text{ }\mu\text{s}$** | **$5.702\text{ }\mu\text{s}$** | Microsecond-level task dispatch on Cortex-M33 (relative to the best cycle; a lower bound). |
 | **Internal DWT Worst-Case Lateness** | **$10.325\text{ }\mu\text{s}$** | **$44.569\text{ }\mu\text{s}$** | **$49.082\text{ }\mu\text{s}$** | WCL strictly bounded $< 50\text{ }\mu\text{s}$ under 100% Linux storm. |
 | **External Referee Mean Period** | $10.0016\text{ ms}$ | $10.0016\text{ ms}$ | $10.0015\text{ ms}$ | Pin period as counted by the referee's own clock. |
-| **Referee Period vs. 10 ms** | $+1.56\text{ }\mu\text{s/cyc}$ ($+155.5\text{ ppm}$) | $+1.58\text{ }\mu\text{s/cyc}$ ($+158.5\text{ ppm}$) | $+1.52\text{ }\mu\text{s/cyc}$ ($+151.7\text{ ppm}$) | Combination of the DUT's timekeeping loss (+545 ppm) and the offset between the two boards' clocks (≈390 ppm). Both boards use internal RC oscillators; this is not a crystal drift. |
-| **DWT − Referee Period (per cycle)** | $3.6\text{–}4.4\text{ }\mu\text{s}$ | $3.4\text{–}4.2\text{ }\mu\text{s}$ | $3.4\text{–}4.3\text{ }\mu\text{s}$ | Offset between the two boards' clocks (≈390 ppm). A constant pin or interrupt delay cancels out in a period difference, so this does not measure GPIO or EXTI latency. |
+| **Referee Period vs. 10 ms** | $+1.56\text{ }\mu\text{s/cyc}$ ($+155.5\text{ ppm}$) | $+1.58\text{ }\mu\text{s/cyc}$ ($+158.5\text{ ppm}$) | $+1.52\text{ }\mu\text{s/cyc}$ ($+151.7\text{ ppm}$) | Combination of the DUT's timekeeping loss (+545 ppm) and a ≈390 ppm offset seen by the referee. That offset may come from the boards' oscillators, from the referee's own Zephyr counter losing time while idle, or both; it is not yet separated. |
+| **DWT − Referee Period (per cycle)** | $3.6\text{–}4.4\text{ }\mu\text{s}$ | $3.4\text{–}4.2\text{ }\mu\text{s}$ | $3.4\text{–}4.3\text{ }\mu\text{s}$ | The ≈390 ppm offset above. A constant pin or interrupt delay cancels out in a period difference, so this does not measure GPIO or EXTI latency. |
 | **Deadline Miss Ratio (DMR @ 1.0 ms)** | **$0.00\%$** (0 / 9,999) | **$0.00\%$** (0 / 9,999) | **$0.00\%$** (0 / 9,999) | Zero deadline misses under full system contention. |
 | **Deadline Miss Ratio (DMR @ 0.2 ms)** | **$0.00\%$** (0 / 9,999) | **$0.00\%$** (0 / 9,999) | **$0.00\%$** (0 / 9,999) | Zero misses at high-precision $200\text{ }\mu\text{s}$ industrial tolerance. |
-| **Deadline Miss Ratio (DMR @ 50 µs)** | **$0.00\%$** (0 / 9,999) | **$0.00\%$** (0 / 9,999) | **$0.00\%$** (0 / 9,999) | Zero misses at extreme sub-millisecond threshold. |
+| **Deadline Miss Ratio (DMR @ 50 µs)** | **$0.00\%$** (0 / 9,999) | **$0.00\%$** (0 / 9,999) | **$0.00\%$** (0 / 9,999) | WCL is only 0.9 µs under this tier and is a lower bound, so treat this row with care. |
 
 ### 7.4 Architectural Synthesis: The 3-Way Comparative Contrast
 
@@ -287,7 +288,7 @@ Comparing the Config C baseline (no IPC) with Configs A and B under maximum stre
 ## 8. Teammate Synchronization & Next Steps
 
 - **Huy (In-Lab Lead 🔧):**
-  - Phase 2 fully completed ahead of Milestone 2 deadline (Oct 20, 2026).
+  - Phase 2 fully completed ahead of the Milestone 2 deadline (Oct 27, 2026; originally Oct 20).
   - Scaled the benchmark matrix to 10,000 cycles across all 9 runs (Configs A and B, plus the Config C baseline without IPC; $90,000\text{ cycles}$).
   - Dual-perspective hardware referee metrology validated with 10,000 physical pulse cross-correlation.
   - Ingested raw telemetry into post-processor, generated all 4 IEEE figures, and pushed to `feature/phase2-linux-benchmark`.
