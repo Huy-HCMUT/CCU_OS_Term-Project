@@ -77,14 +77,14 @@ To mirror real-world industrial edge controllers, the benchmark implements **Opt
 |  - Buffers timestamp in RAM                                - CWRU AI Analytics    |
 |         │                                                          │              |
 |         ▼                                                          ▼              |
-|   Config A (CFS) vs Config B (SCHED_FIFO 90)              Pinned to Core 0        |
+|   Config A (CFS) vs Config B (SCHED_FIFO 90)              Core 0 at 50/100%       |
 +-----------------------------------------------------------------------------------+
 ```
 
 - **Thread 1 (Control Reflex Loop — 10.00 ms Strict Cadence):**  
   Periodically wakes up every $10.00\text{ ms}$ ($100\text{ Hz}$) using `clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME)`. It atomically reads the motor speed setpoint (`atomic_load`), records wake-up timestamp telemetry into an in-memory RAM buffer, and immediately sleeps. Zero disk or console I/O is performed inside the loop.
 - **Thread 2 (Cognitive Brain / Vibration Analytics — ~85.33 ms Period):**  
-  Periodically processes 1024-point vibration frames from `data/processed/cwru_test_frames.bin`. It applies a Hanning window, computes a Radix-2 FFT, extracts spectral fault peaks, and atomically updates the motor setpoint (`atomic_store`). It runs asynchronously and never blocks Thread 1.
+  Periodically processes 1024-point vibration frames from `data/processed/cwru_test_frames.bin`. It applies a Hanning window, computes a Radix-2 FFT, extracts spectral fault peaks, and atomically updates the motor setpoint (`atomic_store`). It shares no lock with Thread 1 (the setpoint is a single atomic), so it can never block it on a lock. It does compete for CPU time: at 50% and 100% stress the whole process is pinned to Core 0, so in Config A both threads share that core at the same priority. In Config B, Thread 1 preempts it.
 
 ### 4.2 Configuration Implementations: Config A vs. Config B vs. Config C
 
@@ -136,17 +136,17 @@ All experiments were executed on physical hardware (**Arduino UNO Q Qualcomm Cor
 
 | Configuration | Stress Tier | Avg Lateness ($\bar{L}$) | Worst-Case Lateness (Max) | Tail ($P_{99.9}$) | Timing Jitter ($\sigma_L$) | Deadline Miss Ratio (DMR) | Deadline Misses ($L_k > 1\text{ ms}$) | Invol Ctx Sw (`ru_nivcsw`) | Minor Page Faults (`ru_minflt`) |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Config A (Linux CFS)** | **0% (Idle)** | 0.223 ms | **0.634 ms** | 0.401 ms | 0.030 ms | **0.00%** | **0 / 10,000** | 0 | 2 |
-| **Config A (Linux CFS)** | **50% (Composite)** | 0.188 ms | **6.120 ms** | 4.179 ms | 0.482 ms | **2.76%** | **276 / 10,000** | 16 | 1 |
-| **Config A (Linux CFS)** | **100% (Storm)** | 0.516 ms | **5.805 ms** | 4.700 ms | 1.041 ms | **13.91%** | **1,391 / 10,000** | 14 | 1 |
-| **Config B (`SCHED_FIFO` 90 + `mlock`)** | **0% (Idle)** | 0.168 ms | **0.478 ms** | 0.316 ms | 0.034 ms | **0.00%** | **0 / 10,000** | 0 | **2** |
-| **Config B (`SCHED_FIFO` 90 + `mlock`)** | **50% (Composite)** | 0.052 ms | **0.865 ms** | 0.413 ms | 0.038 ms | **0.00%** | **0 / 10,000** | 29 | **1** |
-| **Config B (`SCHED_FIFO` 90 + `mlock`)** | **100% (Storm)** | 0.060 ms | **0.759 ms** | 0.366 ms | 0.039 ms | **0.00%** | **0 / 10,000** | 29 | **1** |
+| **Config A (Linux CFS)** | **0% (Idle)** | 0.223 ms | **0.634 ms** | 0.401 ms | 0.030 ms | **0.00%** | **0 / 10,000** | 0 | 152 |
+| **Config A (Linux CFS)** | **50% (Composite)** | 0.188 ms | **6.120 ms** | 4.179 ms | 0.482 ms | **2.76%** | **276 / 10,000** | 39 | 148 |
+| **Config A (Linux CFS)** | **100% (Storm)** | 0.516 ms | **5.805 ms** | 4.700 ms | 1.041 ms | **13.91%** | **1,391 / 10,000** | 57 | 153 |
+| **Config B (`SCHED_FIFO` 90 + `mlock`)** | **0% (Idle)** | 0.168 ms | **0.478 ms** | 0.316 ms | 0.034 ms | **0.00%** | **0 / 10,000** | 0 | **0** |
+| **Config B (`SCHED_FIFO` 90 + `mlock`)** | **50% (Composite)** | 0.052 ms | **0.865 ms** | 0.413 ms | 0.038 ms | **0.00%** | **0 / 10,000** | 27 | **0** |
+| **Config B (`SCHED_FIFO` 90 + `mlock`)** | **100% (Storm)** | 0.060 ms | **0.759 ms** | 0.366 ms | 0.039 ms | **0.00%** | **0 / 10,000** | 25 | **0** |
 | **Config C baseline (no IPC)** | **0% (Idle)** | 0.002 ms | **0.010 ms** | 0.010 ms | 0.003 ms | **0.00%** | **0 / 10,000** | n/a | n/a |
 | **Config C baseline (no IPC)** | **50% (Composite)** | 0.005 ms | **0.045 ms** | 0.044 ms | 0.012 ms | **0.00%** | **0 / 10,000** | n/a | n/a |
 | **Config C baseline (no IPC)** | **100% (Storm)** | 0.006 ms | **0.049 ms** | 0.049 ms | 0.013 ms | **0.00%** | **0 / 10,000** | n/a | n/a |
 
-*(Statistical post-processing generated via `benchmarks/analysis/analyze_latency.py`; summary table archived in `results/summary.md`; raw telemetry logs archived in `results/raw/[ABC]_*.csv`). `ru_nivcsw` and `ru_minflt` are process-wide counts (`getrusage(RUSAGE_SELF)`) covering both threads, not Thread 1 alone; they do not exist on the MCU and were not measured for Config C.*
+*(Statistical post-processing generated via `benchmarks/analysis/analyze_latency.py`; summary table archived in `results/summary.md`; raw telemetry logs archived in `results/raw/[ABC]_*.csv`). `ru_nivcsw` and `ru_minflt` are process-wide counts (`getrusage(RUSAGE_SELF)`) covering both threads, not Thread 1 alone; they do not exist on the MCU and were not measured for Config C. The program samples them every 500 cycles, so the columns show the change from cycle 0 to cycle 9,500 (computed from the raw CSVs; earlier versions of this table listed values that the raw files do not reproduce).*
 
 *Comparability: A/B lateness is absolute, measured against the real schedule $R_k$ with `CLOCK_MONOTONIC`. Config C lateness is wake-only: it is measured from the best cycle after fitting the period (+545.5 ppm, see §7.3), so it is a lower bound and its mean is not comparable with the A/B means. Compare jitter ($\sigma_L$), $P_{99.9}$ and worst-case lateness across platforms, not mean lateness.*
 
@@ -196,12 +196,12 @@ The following IEEE-formatted figures illustrate the empirical distributions acro
 - In Linux, real-time priorities (1–99) mathematically outrank normal CFS tasks (`SCHED_OTHER`, priority 0).
 - The instant Thread 1's 10 ms monotonic timer fires, the kernel immediately evicts background CFS workers from Core 0.
 - Worst-case lateness remained strictly bounded: **$0.478\text{ ms} \to 0.865\text{ ms} \to 0.759\text{ ms}$**, maintaining **strictly 0.00% DMR (0 misses)** across all tiers under 1.0 ms tolerance.
-- `ru_nivcsw` cannot show whether Thread 1 itself was preempted: it is a process-wide count that includes the analytics thread (Config B: 29 at 50% and 100% stress).
+- `ru_nivcsw` cannot show whether Thread 1 itself was preempted: it is a process-wide count that includes the analytics thread (Config B: 27 at 50% and 25 at 100% stress).
 
 ### 6.3 Virtual Memory Locking (`mlockall`)
 - In Linux, default dynamic memory allocation (`malloc`) uses demand paging: physical RAM pages are only allocated on first write, triggering a **Minor Page Fault (`ru_minflt`)**.
 - Config B calls `mlockall(MCL_CURRENT | MCL_FUTURE)` and prefaults the telemetry buffer at startup, so its pages stay in physical RAM.
-- In the main matrix, the process-wide `ru_minflt` count was 1–2 for both Config A and Config B, so these runs show no page-fault difference between them. Test 4 (`test4_memory_no_mlock.csv` vs. `test4_memory_with_mlock.csv`) was meant to isolate the effect of memory locking, but it points the opposite way: with `mlockall` the mean lateness is 413 µs and 81% of cycles exceed 0.2 ms, without it 208 µs and 46% (2,000 cycles each). Either the test setup does not isolate memory locking, or this is a real effect. Until it is understood, Test 4 is not used as evidence for `mlockall`.
+- In the main matrix, Config A incurs 148–153 minor page faults per run (cycles 0–9,500) in every stress tier, while Config B incurs none. The count matches the record buffer: 10,000 records × 64 bytes ≈ 156 pages of 4 KiB, which Config A allocates with `malloc` and touches for the first time inside the timing loop, page by page. Config B prefaults and locks it. Each minor fault costs only microseconds, so this does not explain Config A's millisecond-scale misses. (Page size of 4 KiB assumed, not checked on the board.) Test 4 (`test4_memory_no_mlock.csv` vs. `test4_memory_with_mlock.csv`) was meant to isolate the effect of memory locking, but it points the opposite way: with `mlockall` the mean lateness is 413 µs and 81% of cycles exceed 0.2 ms, without it 208 µs and 46% (2,000 cycles each). Either the test setup does not isolate memory locking, or this is a real effect. Until it is understood, Test 4 is not used as evidence for `mlockall`.
 
 ### 6.4 CPU Frequency Control (Design Choice)
 - Under the default `schedutil` governor, the kernel changes CPU frequency with load (e.g. to lower operating points such as 1.3 GHz on this chip), and each frequency change can add wake-up delay.
