@@ -5,8 +5,12 @@ KPIs defined in `docs/Project_Scope_Statement.md` §4.3.2 and the figures listed
 
 ```bash
 pip install -r benchmarks/analysis/requirements.txt
-python3 benchmarks/analysis/analyze_latency.py --warmup 2000 --max-cycles 10000
+python3 benchmarks/analysis/analyze_latency.py --clock-hz 160e6
 ```
+
+This is the command that reproduces the committed `results/summary.*` (all
+10,000 cycles per run, no warm-up trimmed). `--warmup N` and `--max-cycles N`
+are optional trimming and change the cycle counts in the summary.
 
 By default it reads `results/raw/*.csv` and writes `results/summary.csv`,
 `results/summary.md` and four figures under `results/plots/`.
