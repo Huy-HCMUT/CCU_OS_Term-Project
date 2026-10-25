@@ -18,9 +18,37 @@ By default it reads `results/raw/*.csv` and writes `results/summary.csv`,
 ## Input files
 
 One CSV per run, named `<config>_<stress>[_<tag>].csv`, e.g. `A_0.csv`,
-`B_100.csv`, `C_50_referee.csv`. Files with the same config and stress level
-are pooled. Lines starting with `#` are ignored, so run metadata (kernel
-version, CPU affinity, `stress-ng` command) can sit at the top of the file.
+`B_100.csv`, `C_50_ipc.csv`. Lines starting with `#` are ignored, so run
+metadata (kernel version, CPU affinity, `stress-ng` command) can sit at the
+top of the file.
+
+### Series: one per config + tag
+
+Each config + tag is its own series in the tables and plots, so new runs are
+never pooled with the baseline:
+
+| Files | Series | Label |
+| :--- | :--- | :--- |
+| `C_50.csv` | `C` | C · Zephyr baseline (no IPC) |
+| `C_50_ipc.csv` | `C-ipc` | C · Zephyr · with IPC |
+| `C_50_rerun.csv` | `C-rerun` | C · Zephyr · re-run |
+| `C_50_dwt.csv`, `C_50_referee.csv` | `C-dwt`, `C-referee` | C · Zephyr · DWT / referee board |
+| `C_50_ipc_run1.csv`, `C_50_ipc_run2.csv` | `C-ipc` (pooled) | repeats of one variant |
+
+A trailing `run<N>` or `rep<N>` marks a repeat and is pooled into its series.
+`benchmarks/run_config_c_hardware_test.py` writes `C_<stress>_dwt.csv` and
+`C_<stress>_referee.csv` for each run; they show up as two series measured
+on the same run, not as one pooled result.
+
+Untagged series keep a fixed colour per config (A blue, B orange, C green).
+Tagged series take the next free colours and are drawn dashed (hatched in
+the box plots), so they never rely on colour alone. Pick what to plot with
+`--series` and rename with `--label`:
+
+```bash
+python3 benchmarks/analysis/analyze_latency.py --clock-hz 160e6 \
+    --series B C C-ipc --label "C-ipc=C · Zephyr + IPC" --out results/m3
+```
 
 Any one of these column layouts works (units: `ns`, `us`, `ms`, `s`, or `cyc`):
 
@@ -60,12 +88,14 @@ When only wake times are known, the script rebuilds `R_k = t0 + k·T`:
 | `--max-cycles N` | all | keep at most N cycles after warm-up |
 | `--raw DIR` / `--out DIR` | `results/raw` / `results` | input and output folders |
 | `--plot-floor-us` | `0.1` | lateness below this is drawn at this value on log axes |
+| `--series ID ...` | all | only include these series, e.g. `B C C-ipc` |
+| `--label ID=TEXT` | built in | display name for a series; repeatable |
 | `--no-plots` | off | write only the tables |
 
 ## Outputs
 
-- `summary.csv` / `summary.md`: one row per config × stress level. Columns:
-  cycle count, mean lateness, jitter `σ_L`, p50/p99/p99.9, worst-case
+- `summary.csv` / `summary.md`: one row per series × stress level. Columns:
+  series, config, tag, cycle count, mean lateness, jitter `σ_L`, p50/p99/p99.9, worst-case
   lateness, misses and DMR at each tolerance, cycles over 40 ms (severe
   starvation), measured period mean/std, and notes (fitted clock offset,
   missing cycles).

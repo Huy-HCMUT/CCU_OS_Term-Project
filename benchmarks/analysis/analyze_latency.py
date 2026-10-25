@@ -11,8 +11,12 @@ File naming
     <config>_<stress>[_<tag>].csv        e.g. A_0.csv, B_100.csv, C_50_referee.csv
 
 <config> is a single letter (A, B, C, ...), <stress> is the stress-ng level in
-percent (0, 50, 100), and <tag> is free text. Files that share a config and a
-stress level are pooled.
+percent (0, 50, 100), and <tag> is free text naming a variant of the run.
+
+Each config + tag is its own series: C_50.csv, C_50_ipc.csv and
+C_50_referee.csv give three series (C, C-ipc, C-referee), so a re-run or an
+IPC run is never pooled with the baseline. A trailing run<N> or rep<N> part
+marks a repeat and is pooled into its series (C_50_ipc_run2.csv -> C-ipc).
 
 Accepted CSV layouts (column names are case-insensitive; '#' lines are comments)
 --------------------------------------------------------------------------------
@@ -63,6 +67,16 @@ CONFIG_LABELS = {
     "B": "B · Linux SCHED_FIFO",
     "C": "C · Zephyr baseline (no IPC)",
 }
+# Base names used when a series carries a tag (C-ipc -> "C · Zephyr · with IPC").
+CONFIG_SHORT = {"A": "A · Linux CFS", "B": "B · Linux SCHED_FIFO", "C": "C · Zephyr"}
+TAG_LABELS = {
+    "ipc": "with IPC",
+    "rerun": "re-run",
+    "baseline": "baseline",
+    "dwt": "DWT",
+    "referee": "referee board",
+}
+REPEAT_RE = re.compile(r"(?:^|[_-])(?:run|rep)\d+$", re.IGNORECASE)
 SURFACE = "#ffffff"
 TEXT_PRIMARY = "#0b0b0b"
 TEXT_SECONDARY = "#52514e"
@@ -79,6 +93,25 @@ class Run:
     source_format: str
     fitted_period_us: float | None = None
     notes: list[str] = field(default_factory=list)
+    tag: str = ""
+
+    @property
+    def series(self) -> str:
+        return series_id(self.config, self.tag)
+
+
+def series_id(config: str, tag: str) -> str:
+    return f"{config}-{tag}" if tag else config
+
+
+def series_label(series: str, overrides: dict[str, str] | None = None) -> str:
+    if overrides and series in overrides:
+        return overrides[series]
+    config, _, tag = series.partition("-")
+    if not tag:
+        return CONFIG_LABELS.get(config, config)
+    parts = [TAG_LABELS.get(t.lower(), t) for t in re.split(r"[_-]", tag) if t]
+    return f"{CONFIG_SHORT.get(config, config)} · {', '.join(parts)}"
 
 
 # --------------------------------------------------------------------------- #
@@ -90,6 +123,13 @@ def parse_filename(path: Path) -> tuple[str, int] | None:
     if not m:
         return None
     return m.group("config").upper(), int(m.group("stress"))
+
+
+def parse_tag(path: Path) -> str:
+    """Variant tag from the file name, minus any trailing run<N>/rep<N> repeat marker."""
+    m = FILENAME_RE.match(path.name)
+    tag = (m.group("tag") or "") if m else ""
+    return REPEAT_RE.sub("", tag).lower()
 
 
 def _find_column(columns: list[str], stem: str) -> tuple[str, str] | None:
@@ -205,7 +245,7 @@ def load_run(path: Path, *, clock_hz: float | None = None, period_mode: str = "f
     period = np.diff(wake) / np.maximum(np.diff(k), 1)
     if np.any(np.diff(k) > 1):
         notes.append(f"{int(np.sum(np.diff(k) - 1))} cycle(s) missing from log")
-    return Run(config, stress, path, lateness, period, fmt, fitted, notes)
+    return Run(config, stress, path, lateness, period, fmt, fitted, notes, parse_tag(path))
 
 
 def trim(run: Run, warmup: int, max_cycles: int | None) -> Run:
@@ -218,7 +258,7 @@ def trim(run: Run, warmup: int, max_cycles: int | None) -> Run:
     if max_cycles is not None and len(lat) < max_cycles:
         run.notes.append(f"only {len(lat)} cycles after warm-up (wanted {max_cycles})")
     return Run(run.config, run.stress, run.path, lat, per, run.source_format,
-               run.fitted_period_us, run.notes)
+               run.fitted_period_us, run.notes, run.tag)
 
 
 # --------------------------------------------------------------------------- #
@@ -234,12 +274,14 @@ def tol_key(tolerance_ms: float) -> str:
     return f"{tolerance_ms * 1e3:g}us"
 
 
-def summarize(config: str, stress: int, runs: list[Run],
+def summarize(series: str, stress: int, runs: list[Run],
               tolerances_ms: tuple[float, ...]) -> dict:
     lat = np.concatenate([r.lateness_us for r in runs])
     per = np.concatenate([r.period_us for r in runs])
     row = {
-        "config": config,
+        "series": series,
+        "config": runs[0].config,
+        "tag": runs[0].tag,
         "stress_pct": stress,
         "files": ";".join(r.path.name for r in runs),
         "format": ";".join(sorted({r.source_format for r in runs})),
@@ -263,13 +305,14 @@ def summarize(config: str, stress: int, runs: list[Run],
     return row
 
 
-def format_markdown(summary: pd.DataFrame, tolerances_ms: tuple[float, ...]) -> str:
+def format_markdown(summary: pd.DataFrame, tolerances_ms: tuple[float, ...],
+                    labels: dict[str, str] | None = None) -> str:
     head = ["Config", "Stress", "Cycles", "Mean (µs)", "σ_L (µs)", "p99.9 (µs)",
             "WCL (µs)"] + [f"DMR @ {tol:g} ms" for tol in tolerances_ms] + ["> 40 ms"]
     lines = ["| " + " | ".join(head) + " |", "|" + "|".join([" :--- "] * 2 + [" ---: "] * (len(head) - 2)) + "|"]
     for _, r in summary.iterrows():
         cells = [
-            CONFIG_LABELS.get(r.config, r.config), f"{r.stress_pct}%", f"{r.cycles:,}",
+            series_label(r.series, labels), f"{r.stress_pct}%", f"{r.cycles:,}",
             f"{r.lateness_mean_us:.3f}", f"{r.jitter_std_us:.3f}",
             f"{r.lateness_p99_9_us:.3f}", f"{r.wcl_max_us:.3f}",
         ] + [f"{r[f'dmr_{tol_key(t)}_pct']:.2f}%" for t in tolerances_ms] + [
@@ -295,9 +338,24 @@ def _style(plt) -> None:
     })
 
 
-def _color_map(configs: list[str]) -> dict[str, str]:
-    # Fixed slot per config letter so a missing config never repaints the rest.
-    return {c: CONFIG_COLORS[(ord(c) - ord("A")) % len(CONFIG_COLORS)] for c in configs}
+def _color_map(series: list[str]) -> dict[str, str]:
+    """Fixed slot per config letter for untagged series, so a missing config never
+    repaints the rest; tagged series take the next free slots in sorted order."""
+    colors = {s: CONFIG_COLORS[(ord(s[0]) - ord("A")) % len(CONFIG_COLORS)]
+              for s in series if "-" not in s}
+    free = [c for c in CONFIG_COLORS if c not in colors.values()]
+    for i, s in enumerate(x for x in series if "-" in x):
+        colors[s] = free[i % len(free)] if free else CONFIG_COLORS[i % len(CONFIG_COLORS)]
+    return colors
+
+
+def _line_style(series: str):
+    # Secondary encoding: variants are dashed so identity never rests on colour alone.
+    return (0, (4, 2)) if "-" in series else "-"
+
+
+def _series_order(series) -> list[str]:
+    return sorted(series, key=lambda s: (s[0], s.partition("-")[2]))
 
 
 def _panels(plt, n: int, sharey: bool = True):
@@ -306,16 +364,18 @@ def _panels(plt, n: int, sharey: bool = True):
 
 
 def plot_all(groups: dict[tuple[str, int], np.ndarray], tolerances_ms: tuple[float, ...],
-             out_dir: Path, floor_us: float) -> list[Path]:
+             out_dir: Path, floor_us: float, labels: dict[str, str] | None = None) -> list[Path]:
+    """groups maps (series, stress) to lateness in µs."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.ticker import FuncFormatter
 
     _style(plt)
-    configs = sorted({c for c, _ in groups})
+    configs = _series_order({c for c, _ in groups})
     stresses = sorted({s for _, s in groups})
     colors = _color_map(configs)
+    name = lambda c: series_label(c, labels)
     out_dir.mkdir(parents=True, exist_ok=True)
     written = []
     us_fmt = FuncFormatter(lambda v, _: f"{v:g}" if v < 1e3 else f"{v / 1e3:g} ms")
@@ -333,11 +393,15 @@ def plot_all(groups: dict[tuple[str, int], np.ndarray], tolerances_ms: tuple[flo
 
     def legend(fig, handles_from):
         handles, labels = handles_from.get_legend_handles_labels()
-        fig.legend(handles, labels, loc="upper center", ncol=len(labels),
-                   bbox_to_anchor=(0.5, 1.02))
+        ncol = min(len(labels), 4)
+        fig.legend(handles, labels, loc="upper center", ncol=ncol,
+                   bbox_to_anchor=(0.5, 1.02 + 0.06 * ((len(labels) - 1) // ncol)))
+
+    legend_rows = (len(configs) - 1) // 4
 
     def finish(fig, name, title, has_legend=True):
-        fig.suptitle(title, y=1.10 if has_legend else 1.0, fontsize=10, color=TEXT_PRIMARY)
+        y = 1.10 + 0.06 * legend_rows if has_legend else 1.0
+        fig.suptitle(title, y=y, fontsize=10, color=TEXT_PRIMARY)
         fig.tight_layout()
         path = out_dir / name
         fig.savefig(path, dpi=200, bbox_inches="tight")
@@ -358,7 +422,7 @@ def plot_all(groups: dict[tuple[str, int], np.ndarray], tolerances_ms: tuple[flo
             srt = np.sort(lat)
             miss = (1.0 - np.searchsorted(srt, xs, side="right") / srt.size) * 100.0
             ax.step(xs, np.maximum(miss, zero), where="post",
-                    color=colors[c], label=CONFIG_LABELS.get(c, c))
+                    color=colors[c], ls=_line_style(c), label=name(c))
         tol_lines(ax, vertical=True, label=ax is axes[-1])
         ax.set_xscale("log"); ax.set_yscale("log")
         ax.set_ylim(zero * 0.7, 150)
@@ -382,7 +446,7 @@ def plot_all(groups: dict[tuple[str, int], np.ndarray], tolerances_ms: tuple[flo
                 continue
             srt = np.sort(np.maximum(lat, floor_us))
             ax.step(srt, np.arange(1, srt.size + 1) / srt.size * 100.0, where="post",
-                    color=colors[c], label=CONFIG_LABELS.get(c, c))
+                    color=colors[c], ls=_line_style(c), label=name(c))
         tol_lines(ax, vertical=True)
         ax.set_xscale("log")
         ax.xaxis.set_major_formatter(us_fmt)
@@ -394,7 +458,10 @@ def plot_all(groups: dict[tuple[str, int], np.ndarray], tolerances_ms: tuple[flo
     finish(fig, "lateness_cdf.png", "Cumulative distribution of wake-up lateness")
 
     # 3. Box plots, whiskers at p0.1 / p99.9, outliers beyond.
-    fig, axes = _panels(plt, len(stresses))
+    panel_w = max(3.4, 0.7 * len(configs) + 1.3)
+    fig, axes = plt.subplots(1, len(stresses), figsize=(panel_w * len(stresses), 3.0),
+                             sharey=True, squeeze=False)
+    axes = axes[0]
     for ax, s in zip(axes, stresses):
         present = [c for c in configs if (c, s) in groups]
         data = [np.maximum(groups[(c, s)], floor_us) for c in present]
@@ -406,8 +473,11 @@ def plot_all(groups: dict[tuple[str, int], np.ndarray], tolerances_ms: tuple[flo
                                     "markeredgewidth": 0})
         for patch, flier, c in zip(bp["boxes"], bp["fliers"], present):
             patch.set(facecolor=colors[c], edgecolor=colors[c], alpha=0.85)
+            if "-" in c:
+                patch.set(hatch="////", edgecolor=SURFACE)
             flier.set(markerfacecolor=colors[c])
-        ax.set_xticks(range(1, len(present) + 1), present)
+        ax.set_xticks(range(1, len(present) + 1), present,
+                      rotation=30 if len(present) > 4 else 0)
         tol_lines(ax, vertical=False, label=ax is axes[-1])
         ax.set_yscale("log")
         ax.yaxis.set_major_formatter(us_fmt)
@@ -468,6 +538,10 @@ def main(argv: list[str] | None = None) -> int:
                         "between boards) or assume exactly 10 ms")
     p.add_argument("--plot-floor-us", type=float, default=0.1,
                    help="lateness below this is drawn at this value on log axes (default: 0.1)")
+    p.add_argument("--series", nargs="+", metavar="ID", default=None,
+                   help="only include these series, e.g. --series B C C-ipc (default: all)")
+    p.add_argument("--label", action="append", default=[], metavar="ID=TEXT",
+                   help="display name for a series, e.g. --label 'C-dwt=C · Zephyr re-run'")
     p.add_argument("--no-plots", action="store_true", help="only write the summary tables")
     args = p.parse_args(argv)
 
@@ -477,33 +551,46 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     tolerances = tuple(sorted(set(args.tolerances), reverse=True))
+    labels = {}
+    for item in args.label:
+        key, sep, text = item.partition("=")
+        if not sep:
+            p.error(f"--label expects ID=TEXT, got {item!r}")
+        labels[key] = text
+    wanted = None if args.series is None else {
+        series_id(c.upper(), t.lower()) for c, _, t in (x.partition("-") for x in args.series)}
     by_group: dict[tuple[str, int], list[Run]] = {}
     for f in files:
         if parse_filename(f) is None:
             print(f"skipping {f.name}: name is not <config>_<stress>[_tag].csv", file=sys.stderr)
             continue
+        config, _ = parse_filename(f)
+        if wanted is not None and series_id(config, parse_tag(f)) not in wanted:
+            continue
         run = trim(load_run(f, clock_hz=args.clock_hz, period_mode=args.period_mode,
                             counter_bits=args.counter_bits),
                    args.warmup, args.max_cycles)
-        by_group.setdefault((run.config, run.stress), []).append(run)
+        by_group.setdefault((run.series, run.stress), []).append(run)
     if not by_group:
         print("no usable runs", file=sys.stderr)
         return 1
 
-    rows = [summarize(c, s, runs, tolerances) for (c, s), runs in sorted(by_group.items())]
+    order = {c: i for i, c in enumerate(_series_order({c for c, _ in by_group}))}
+    rows = [summarize(c, s, runs, tolerances)
+            for (c, s), runs in sorted(by_group.items(), key=lambda kv: (order[kv[0][0]], kv[0][1]))]
     summary = pd.DataFrame(rows)
     args.out.mkdir(parents=True, exist_ok=True)
     summary.to_csv(args.out / "summary.csv", index=False, float_format="%.4f")
-    md = format_markdown(summary, tolerances)
+    md = format_markdown(summary, tolerances, labels)
     (args.out / "summary.md").write_text(md, encoding="utf-8")
     print(md)
     for r in rows:
         if r["notes"]:
-            print(f"note [{r['config']} {r['stress_pct']}%]: {r['notes']}")
+            print(f"note [{r['series']} {r['stress_pct']}%]: {r['notes']}")
 
     if not args.no_plots:
         groups = {k: np.concatenate([r.lateness_us for r in v]) for k, v in by_group.items()}
-        for path in plot_all(groups, tolerances, args.out / "plots", args.plot_floor_us):
+        for path in plot_all(groups, tolerances, args.out / "plots", args.plot_floor_us, labels):
             print(f"wrote {path}")
     print(f"wrote {args.out / 'summary.csv'}")
     print(f"wrote {args.out / 'summary.md'}")
