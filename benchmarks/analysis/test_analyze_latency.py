@@ -124,3 +124,53 @@ def test_cli_end_to_end(tmp_path):
     assert (out / "summary.md").read_text().startswith("| Config")
     for name in ("dmr_vs_tolerance", "lateness_cdf", "lateness_boxplot", "lateness_timeseries"):
         assert (out / "plots" / f"{name}.png").stat().st_size > 0
+
+
+def test_tags_become_separate_series():
+    assert al.parse_tag(Path("C_50.csv")) == ""
+    assert al.parse_tag(Path("C_50_IPC.csv")) == "ipc"
+    assert al.parse_tag(Path("C_50_ipc_run2.csv")) == "ipc"
+    assert al.parse_tag(Path("C_50_rep3.csv")) == ""
+    assert al.parse_tag(Path("C_50_referee.csv")) == "referee"
+    assert al.series_label("C") == "C · Zephyr baseline (no IPC)"
+    assert al.series_label("C-ipc") == "C · Zephyr · with IPC"
+    assert al.series_label("C-ipc_referee") == "C · Zephyr · with IPC, referee board"
+    assert al.series_label("C-ipc", {"C-ipc": "custom"}) == "custom"
+
+
+def test_variant_colors_are_stable_and_distinct():
+    colors = al._color_map(["A", "B", "C", "C-ipc", "C-rerun"])
+    assert colors["A"] == al.CONFIG_COLORS[0] and colors["C"] == al.CONFIG_COLORS[2]
+    assert len(set(colors.values())) == 5
+    # Dropping A must not repaint C or the variants' base slots.
+    assert al._color_map(["C", "C-ipc"])["C"] == colors["C"]
+
+
+def test_cli_keeps_baseline_ipc_and_referee_apart(tmp_path):
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    k = np.arange(1_000)
+    base = k * PERIOD_NS
+    write(raw / "C_100.csv", wake_ns=base)
+    write(raw / "C_100_ipc.csv", wake_ns=base + np.where(k == 500, 80_000, 0))
+    write(raw / "C_100_ipc_run2.csv", wake_ns=base)
+    write(raw / "C_100_referee.csv", wake_us=base / 1000)
+    write(raw / "B_100.csv", lateness_ns=np.full(1_000, 50_000))
+
+    out = tmp_path / "out"
+    assert al.main(["--raw", str(raw), "--out", str(out), "--period-mode", "nominal"]) == 0
+    summary = pd.read_csv(out / "summary.csv", keep_default_na=False)
+    assert list(summary["series"]) == ["B", "C", "C-ipc", "C-referee"]
+    by = summary.set_index("series")
+    assert by.loc["C", "cycles"] == 1_000 and by.loc["C", "wcl_max_us"] == 0
+    assert by.loc["C-ipc", "cycles"] == 2_000          # the run2 repeat is pooled
+    assert by.loc["C-ipc", "wcl_max_us"] == pytest.approx(80.0)
+    assert "C · Zephyr · with IPC" in (out / "summary.md").read_text()
+
+    out2 = tmp_path / "out2"
+    assert al.main(["--raw", str(raw), "--out", str(out2), "--period-mode", "nominal",
+                    "--series", "c", "C-IPC", "--label", "C-ipc=C · IPC run"]) == 0
+    s2 = pd.read_csv(out2 / "summary.csv", keep_default_na=False)
+    assert list(s2["series"]) == ["C", "C-ipc"]
+    assert "C · IPC run" in (out2 / "summary.md").read_text()
+    assert (out2 / "plots" / "lateness_boxplot.png").stat().st_size > 0
