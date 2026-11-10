@@ -32,6 +32,7 @@ never pooled with the baseline:
 | `C_50.csv` | `C` | C · Zephyr baseline (no IPC) |
 | `C_50_ipc.csv` | `C-ipc` | C · Zephyr · with IPC |
 | `C_50_rerun.csv` | `C-rerun` | C · Zephyr · re-run |
+| `C_50_b2.csv` | `C-b2` | C · Zephyr · re-run, DWT referee |
 | `C_50_dwt.csv`, `C_50_referee.csv` | `C-dwt`, `C-referee` | C · Zephyr · DWT / referee board |
 | `C_50_ipc_run1.csv`, `C_50_ipc_run2.csv` | `C-ipc` (pooled) | repeats of one variant |
 

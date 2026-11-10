@@ -121,7 +121,7 @@ def test_cli_end_to_end(tmp_path):
     assert len(summary) == 6
     assert set(summary["cycles"]) == {1_900}
     assert {"dmr_1000us_pct", "dmr_200us_pct"} <= set(summary.columns)
-    assert (out / "summary.md").read_text().startswith("| Config")
+    assert (out / "summary.md").read_text(encoding="utf-8").startswith("| Config")
     for name in ("dmr_vs_tolerance", "lateness_cdf", "lateness_boxplot", "lateness_timeseries"):
         assert (out / "plots" / f"{name}.png").stat().st_size > 0
 
@@ -136,6 +136,7 @@ def test_tags_become_separate_series():
     assert al.series_label("C-ipc") == "C · Zephyr · with IPC"
     assert al.series_label("C-ipc_referee") == "C · Zephyr · with IPC, referee board"
     assert al.series_label("C-ipc", {"C-ipc": "custom"}) == "custom"
+    assert al.series_label("C-b2") == "C · Zephyr · re-run, DWT referee"
 
 
 def test_variant_colors_are_stable_and_distinct():
@@ -165,12 +166,12 @@ def test_cli_keeps_baseline_ipc_and_referee_apart(tmp_path):
     assert by.loc["C", "cycles"] == 1_000 and by.loc["C", "wcl_max_us"] == 0
     assert by.loc["C-ipc", "cycles"] == 2_000          # the run2 repeat is pooled
     assert by.loc["C-ipc", "wcl_max_us"] == pytest.approx(80.0)
-    assert "C · Zephyr · with IPC" in (out / "summary.md").read_text()
+    assert "C · Zephyr · with IPC" in (out / "summary.md").read_text(encoding="utf-8")
 
     out2 = tmp_path / "out2"
     assert al.main(["--raw", str(raw), "--out", str(out2), "--period-mode", "nominal",
                     "--series", "c", "C-IPC", "--label", "C-ipc=C · IPC run"]) == 0
     s2 = pd.read_csv(out2 / "summary.csv", keep_default_na=False)
     assert list(s2["series"]) == ["C", "C-ipc"]
-    assert "C · IPC run" in (out2 / "summary.md").read_text()
+    assert "C · IPC run" in (out2 / "summary.md").read_text(encoding="utf-8")
     assert (out2 / "plots" / "lateness_boxplot.png").stat().st_size > 0
