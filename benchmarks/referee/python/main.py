@@ -59,18 +59,18 @@ def check_commands():
         print(f"[Referee] Total pulses recorded: {total}")
 
         # Fetch recorded deltas using chunked API (50 per call)
-        deltas = []
+        deltas_cyc = []
         offset = 0
         while offset < total:
             try:
                 chunk_str = safe_bridge_call("get_deltas_chunk", offset, retries=3, delay=0.2)
                 if chunk_str:
                     items = [int(x) for x in chunk_str.split(",") if x.strip()]
-                    deltas.extend(items)
+                    deltas_cyc.extend(items)
                     offset += len(items)
                 else:
                     d = safe_bridge_call("get_delta_at", offset, retries=3, delay=0.2)
-                    deltas.append(d)
+                    deltas_cyc.append(d)
                     offset += 1
             except Exception as e:
                 print(f"[Referee] Chunk fetch error at offset {offset}: {e}")
@@ -78,16 +78,17 @@ def check_commands():
 
         with open(out_csv, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["cycle", "interval_us", "interval_ms", "jitter_ms", "is_miss"])
-            for i, delta_us in enumerate(deltas):
+            writer.writerow(["cycle", "interval_cyc", "interval_us", "interval_ms", "jitter_ms", "is_miss"])
+            for i, d in enumerate(deltas_cyc):
+                delta_us = d / 160.0
                 delta_ms = delta_us / 1000.0
                 jitter_ms = delta_ms - 10.0
-                is_miss = 1 if (abs(jitter_ms) > 1.0) else 0
-                writer.writerow([i, delta_us, f"{delta_ms:.4f}", f"{jitter_ms:.4f}", is_miss])
+                is_miss = 1 if abs(jitter_ms) > 1.0 else 0
+                writer.writerow([i, d, f"{delta_us:.4f}", f"{delta_ms:.6f}", f"{jitter_ms:.6f}", is_miss])
 
         with open(STATUS_FILE, "w") as f:
-            f.write(f"STOPPED {len(deltas)} {out_csv}\n")
-        print(f"[Referee] Saved {len(deltas)} records to {out_csv}")
+            f.write(f"STOPPED {len(deltas_cyc)} {out_csv}\n")
+        print(f"[Referee] Saved {len(deltas_cyc)} records to {out_csv}")
 
     elif cmd == "STATUS":
         try:

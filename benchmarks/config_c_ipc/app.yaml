@@ -1,0 +1,9 @@
+name: config_c_ipc
+description: Config C with Linux->MCU setpoint IPC (Phase 5)
+icon: 🔁
+profiles:
+  default:
+    platforms:
+      - platform: arduino:zephyr
+default_profile: default
+

@@ -15,6 +15,7 @@ from pathlib import Path
 ADB = r"C:\Users\Hyen\platform-tools\adb.exe"
 DUT_ID = "3125036249"
 REF_ID = "253074993"
+RAW_DIR = Path(__file__).resolve().parent.parent / "results" / "raw"
 
 def run_adb(device, cmd):
     res = subprocess.run([ADB, "-s", device, "shell", cmd], capture_output=True, text=True)
@@ -26,20 +27,26 @@ def get_container(device, pattern, default):
 
 DUT_CONTAINER = "tmp-pin_test-main-1"
 REF_CONTAINER = "home-arduino-arduinoapps-referee_bench-main-1"
+IPC_CONTAINER = "config_c_ipc"
 
-def check_preflight():
-    global DUT_CONTAINER, REF_CONTAINER
-    DUT_CONTAINER = get_container(DUT_ID, "pin_test", "tmp-pin_test-main-1")
+def check_preflight(variant=None):
+    global DUT_CONTAINER, REF_CONTAINER, IPC_CONTAINER
+    if variant == "ipc":
+        IPC_CONTAINER = get_container(DUT_ID, "config_c_ipc", "config_c_ipc")
+        dut_for_preflight = IPC_CONTAINER
+    else:
+        DUT_CONTAINER = get_container(DUT_ID, "pin_test", "tmp-pin_test-main-1")
+        dut_for_preflight = DUT_CONTAINER
     REF_CONTAINER = get_container(REF_ID, "referee_bench", "home-arduino-arduinoapps-referee_bench-main-1")
 
     print("=" * 75)
     print(" DUAL-PERSPECTIVE REAL-TIME BENCHMARK: DWT vs HARDWARE REFEREE")
-    print(f" DUT Container: {DUT_CONTAINER} | Referee Container: {REF_CONTAINER}")
+    print(f" DUT Container: {dut_for_preflight} | Referee Container: {REF_CONTAINER}")
     print("=" * 75)
 
     # 1. Check Board 1 DWT status
     print("[Pre-flight 1/2] Checking Board 1 (DUT) Cortex-M33 DWT status...")
-    dwt_check = run_adb(DUT_ID, f"docker exec {DUT_CONTAINER} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('check_dwt_status', 0))\"")
+    dwt_check = run_adb(DUT_ID, f"docker exec {dut_for_preflight} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('check_dwt_status', 0))\"")
     try:
         cycles_in_50us = int(dwt_check)
         if cycles_in_50us > 0:
@@ -56,15 +63,25 @@ def check_preflight():
     print(f"  -> Referee status: {ref_status}")
     print("-" * 75)
 
-def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None):
+def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None):
+    dut = IPC_CONTAINER if variant == "ipc" else DUT_CONTAINER
+    raw_dir = {None: RAW_DIR, "b2": RAW_DIR / "baseline_dwtref", "ipc": RAW_DIR / "ipc"}[variant]
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    std_tag = {None: str(stress_pct), "b2": f"{stress_pct}_b2", "ipc": f"{stress_pct}_ipc"}[variant]
+
     if tag is None:
-        tag = str(stress_pct)
+        tag = std_tag
     print(f"\n>>> EXECUTING CONFIG C RUN: count={sample_count}, stress={stress_pct}%, tag={tag}")
 
     # 1. Arm Referee
     print(f"[1/5] Arming Referee for {sample_count} pulses...")
     run_adb(REF_ID, f"docker exec {REF_CONTAINER} sh -c \"echo 'START {sample_count}' > /tmp/referee_cmd\"")
     time.sleep(0.5)
+
+    if variant == "ipc":
+        run_adb(DUT_ID, f"docker exec {dut} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('reset_ipc', 0))\"")
+        run_adb(DUT_ID, f"docker exec {dut} sh -c \"echo 'START' > /tmp/sender_cmd\"")
+        time.sleep(1.0)
 
     if stress_pct == 50:
         print("[2/5] Starting 50% Linux CPU, IO & Memory stress on Board 1 (stress-ng)...")
@@ -79,13 +96,22 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None):
 
     # 3. Trigger Board 1
     print(f"[3/5] Triggering {sample_count} periodic cycles on Board 1 STM32...")
-    out = run_adb(DUT_ID, f"docker exec {DUT_CONTAINER} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('start_zephyr_pulses', {sample_count}))\"")
+    out = run_adb(DUT_ID, f"docker exec {dut} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('start_zephyr_pulses', {sample_count}))\"")
     print(f"      DUT trigger response: {out}")
 
     # Wait for test to complete (10 ms per pulse + 2.5s overhead)
     wait_time = (sample_count * 0.010) + 2.5
     print(f"      Waiting {wait_time:.1f}s for cycle completion...")
     time.sleep(wait_time)
+
+    if variant == "ipc":
+        run_adb(DUT_ID, f"docker exec {dut} sh -c \"echo 'STOP /home/arduino/sender_{tag}.csv' > /tmp/sender_cmd\"")
+        for _ in range(20):
+            time.sleep(0.5)
+            st_sender = run_adb(DUT_ID, f"docker exec {dut} cat /tmp/sender_status")
+            if st_sender.startswith("STOPPED") or "ERROR" in st_sender:
+                print(f"      Sender status: {st_sender}")
+                break
 
     if stress_pct > 0:
         print("      Stopping stress-ng on Board 1...")
@@ -97,7 +123,7 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None):
     print("[4/5] Stopping Referee capture...")
     ref_remote_csv = f"/home/arduino/referee_{tag}.csv"
     run_adb(REF_ID, f"docker exec {REF_CONTAINER} sh -c \"echo 'STOP {ref_remote_csv}' > /tmp/referee_cmd\"")
-    
+
     # Wait for Referee daemon to finish fetching deltas and writing CSV (up to 45s)
     for _ in range(90):
         time.sleep(0.5)
@@ -108,9 +134,7 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None):
 
     # 5. Retrieve data from both boards
     print("[5/5] Retrieving data from both boards...")
-    raw_dir = Path(__file__).resolve().parent.parent / "results" / "raw"
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # 5A. Pull Referee CSV
     local_ref_csv = raw_dir / f"config_c_referee_{tag}.csv"
     run_adb(REF_ID, f"docker cp {REF_CONTAINER}:{ref_remote_csv} {ref_remote_csv}")
@@ -121,7 +145,7 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None):
     dwt_cycles = []
     offset = 0
     while offset < sample_count:
-        cmd = f"docker exec {DUT_CONTAINER} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('get_dwt_chunk', {offset}))\""
+        cmd = f"docker exec {dut} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('get_dwt_chunk', {offset}))\""
         chunk_str = run_adb(DUT_ID, cmd)
         if chunk_str:
             items = [int(x) for x in chunk_str.split(",") if x.strip()]
@@ -146,29 +170,69 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None):
     print(f"      Saved {len(dwt_cycles)} DWT records to {local_dwt_csv.name}")
     print(f"      Saved Referee records to {local_ref_csv.name}")
 
-    # 5C. Save standardized files for analyze_latency.py: C_{stress}_dwt.csv and C_{stress}_referee.csv
-    if tag == str(stress_pct):
-        std_dwt_csv = raw_dir / f"C_{stress_pct}_dwt.csv"
-        with open(std_dwt_csv, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["cycle", "wake_cyc"])
-            for i, cyc in enumerate(dwt_cycles):
-                writer.writerow([i, cyc])
-        print(f"      Standardized DWT output: {std_dwt_csv.name}")
+    if variant == "ipc":
+        print("      Fetching applied setpoints (seq_chunk) from Board 1 STM32...")
+        seq_words = []
+        offset = 0
+        while offset < sample_count:
+            cmd = f"docker exec {dut} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('get_seq_chunk', {offset}))\""
+            chunk_str = run_adb(DUT_ID, cmd)
+            if chunk_str:
+                items = [int(x) for x in chunk_str.split(",") if x.strip()]
+                seq_words.extend(items)
+                offset += len(items)
+            else:
+                break
 
-        if local_ref_csv.exists():
-            with open(local_ref_csv, "r") as f:
-                ref_rows = list(csv.DictReader(f))
-            std_ref_csv = raw_dir / f"C_{stress_pct}_referee.csv"
-            with open(std_ref_csv, "w", newline="") as f:
+        cmd_rx = f"docker exec {dut} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('get_rx_count', 0))\""
+        rx_count_str = run_adb(DUT_ID, cmd_rx).strip()
+
+        sender_remote_csv = f"/home/arduino/sender_{tag}.csv"
+        local_sender_csv = raw_dir / f"config_c_ipc_sender_{tag}.csv"
+        run_adb(DUT_ID, f"docker cp {dut}:{sender_remote_csv} {sender_remote_csv}")
+        subprocess.run([ADB, "-s", DUT_ID, "pull", sender_remote_csv, str(local_sender_csv)], capture_output=True)
+
+        local_seq_csv = raw_dir / f"config_c_ipc_seq_{tag}.csv"
+        with open(local_seq_csv, "w", newline="") as f:
+            f.write(f"# rx_count={rx_count_str}\n")
+            writer = csv.writer(f)
+            writer.writerow(["cycle", "applied_seq", "applied_setpoint_pct"])
+            for i, w in enumerate(seq_words):
+                writer.writerow([i, w >> 8, w & 0xFF])
+        print(f"      Saved IPC seq records to {local_seq_csv.name}")
+
+    # Standardized output
+    if tag == std_tag:
+        if variant is None:
+            std_dwt_csv = raw_dir / f"C_{stress_pct}_dwt.csv"
+            with open(std_dwt_csv, "w", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(["cycle", "wake_us"])
-                cum_us = 0.0
-                # Skip index 0 (initial arming latency)
-                for i, r in enumerate(ref_rows[1:]):
-                    cum_us += float(r["interval_us"])
-                    writer.writerow([i, cum_us])
-            print(f"      Standardized Referee output: {std_ref_csv.name}")
+                writer.writerow(["cycle", "wake_cyc"])
+                for i, cyc in enumerate(dwt_cycles):
+                    writer.writerow([i, cyc])
+            print(f"      Standardized DWT output: {std_dwt_csv.name}")
+
+            if local_ref_csv.exists():
+                with open(local_ref_csv, "r") as f:
+                    ref_rows = list(csv.DictReader(f))
+                std_ref_csv = raw_dir / f"C_{stress_pct}_referee.csv"
+                with open(std_ref_csv, "w", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["cycle", "wake_us"])
+                    cum_us = 0.0
+                    # Skip index 0 (initial arming latency)
+                    for i, r in enumerate(ref_rows[1:]):
+                        cum_us += float(r["interval_us"])
+                        writer.writerow([i, cum_us])
+                print(f"      Standardized Referee output: {std_ref_csv.name}")
+        else:
+            std_dwt_csv = raw_dir / f"C_{std_tag}.csv"
+            with open(std_dwt_csv, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["cycle", "wake_cyc"])
+                for i, cyc in enumerate(dwt_cycles):
+                    writer.writerow([i, cyc])
+            print(f"      Standardized DWT output: {std_dwt_csv.name}")
 
     # Process and print cross-correlation summary
     analyze_dual_data(local_dwt_csv, local_ref_csv, tag)
@@ -226,9 +290,10 @@ def analyze_dual_data(dwt_path, ref_path, tag):
     print("=" * 80)
 
 if __name__ == "__main__":
-    check_preflight()
     mode = sys.argv[1].lower() if len(sys.argv) > 1 else "sanity"
     count = int(sys.argv[2]) if len(sys.argv) > 2 else 10000
+    variant = "ipc" if mode.startswith("ipc") else ("b2" if mode.startswith("b2") else None)
+    check_preflight(variant=variant)
 
     if mode == "sanity":
         run_dual_benchmark(sample_count=20, stress_pct=0, tag="sanity")
@@ -247,4 +312,25 @@ if __name__ == "__main__":
         run_dual_benchmark(sample_count=count, stress_pct=50, tag="50")
         time.sleep(5.0)
         run_dual_benchmark(sample_count=count, stress_pct=100, tag="100")
-
+    elif mode in ("b2-sanity", "ipc-sanity"):
+        p = variant
+        run_dual_benchmark(sample_count=20, stress_pct=0, tag=f"sanity_{p}", variant=p)
+    elif mode in ("b2-0", "ipc-0"):
+        p = variant
+        run_dual_benchmark(sample_count=count, stress_pct=0, tag=f"0_{p}", variant=p)
+    elif mode in ("b2-50", "ipc-50"):
+        p = variant
+        run_dual_benchmark(sample_count=count, stress_pct=50, tag=f"50_{p}", variant=p)
+    elif mode in ("b2-100", "ipc-100"):
+        p = variant
+        run_dual_benchmark(sample_count=count, stress_pct=100, tag=f"100_{p}", variant=p)
+    elif mode in ("b2-all", "ipc-all"):
+        p = variant
+        print(f"\n>>> EXECUTING FULL CONFIG C {p.upper()} MATRIX (0%, 50%, 100% stress, N={count})...")
+        run_dual_benchmark(sample_count=20, stress_pct=0, tag=f"sanity_{p}", variant=p)
+        time.sleep(3.0)
+        run_dual_benchmark(sample_count=count, stress_pct=0, tag=f"0_{p}", variant=p)
+        time.sleep(5.0)
+        run_dual_benchmark(sample_count=count, stress_pct=50, tag=f"50_{p}", variant=p)
+        time.sleep(5.0)
+        run_dual_benchmark(sample_count=count, stress_pct=100, tag=f"100_{p}", variant=p)

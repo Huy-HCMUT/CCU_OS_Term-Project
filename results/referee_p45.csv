@@ -1,0 +1,4 @@
+tag,referee_clock,n_dut,n_ref,dut_period_mean_us,ref_period_mean_us,ref_vs_dut_ppm,ref_period_std_us,ref_max_abs_jitter_us,ref_misses
+0,k_cycle_us,9999,9999,10005.4553,10001.5554,-389.7845,3.5090,11.0000,0
+100,k_cycle_us,9999,9999,10005.4545,10001.5174,-393.5020,25.4427,897.0000,0
+50,k_cycle_us,9999,9999,10005.4546,10001.5850,-386.7547,29.2012,996.0000,0
