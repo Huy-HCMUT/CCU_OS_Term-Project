@@ -100,7 +100,9 @@ String get_dwt_chunk(int start_idx) {
 int set_setpoint(int seq, int sp) {
   g_sp_word = (((uint32_t)seq & 0xFFFFFFu) << 8) | ((uint32_t)sp & 0xFFu);
   g_rx_count++;
-  if (g_bridge_prio == -99) g_bridge_prio = k_thread_priority_get(k_current_get());
+  // k_sched_current_thread_query(), not k_current_get(): on this core k_current_get()
+  // reads a thread-local variable whose C++ helper symbol the sketch loader cannot resolve.
+  if (g_bridge_prio == -99) g_bridge_prio = k_thread_priority_get(k_sched_current_thread_query());
   return seq;
 }
 
@@ -147,7 +149,7 @@ void setup()
   digitalWrite(LED_BUILTIN + 5, HIGH);
 
   init_dwt_cm33();
-  g_main_prio = k_thread_priority_get(k_current_get());
+  g_main_prio = k_thread_priority_get(k_sched_current_thread_query());
 
   Bridge.begin();
   Bridge.provide("set_pin_by_name", set_pin_by_name);
