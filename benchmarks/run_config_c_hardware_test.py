@@ -29,15 +29,74 @@ DUT_CONTAINER = "tmp-pin_test-main-1"
 REF_CONTAINER = "home-arduino-arduinoapps-referee_bench-main-1"
 IPC_CONTAINER = "config_c_ipc"
 
+VARIANTS = {
+    "b2": {
+        "raw_base": "baseline_dwtref",
+        "tag_suffix": "_b2",
+        "grep": "pin_test",
+        "default_container": "tmp-pin_test-main-1",
+        "kind": "b2",
+    },
+    "ipc": {
+        "raw_base": "ipc",
+        "tag_suffix": "_ipc",
+        "grep": "config_c_ipc",
+        "default_container": "config_c_ipc",
+        "kind": "ipc",
+    },
+    "b2t": {
+        "raw_base": "baseline_tuned",
+        "tag_suffix": "_b2_tuned",
+        "grep": "config_c_base_tuned",
+        "default_container": "config_c_base_tuned",
+        "kind": "b2",
+    },
+    "ipct": {
+        "raw_base": "ipc_tuned",
+        "tag_suffix": "_ipc_tuned",
+        "grep": "config_c_ipc_tuned",
+        "default_container": "config_c_ipc_tuned",
+        "kind": "ipc",
+    },
+}
+
+
+def _variant_raw_dir(variant, rep=1):
+    base = VARIANTS[variant]["raw_base"]
+    return RAW_DIR / (base if rep == 1 else f"{base}_r{rep}")
+
+
+def refuse_overwrite(raw_dir, tags):
+    for t in tags:
+        if str(t).startswith("sanity"):
+            continue
+        p = raw_dir / f"config_c_dwt_{t}.csv"
+        if p.exists():
+            print(f"Refusing to overwrite existing raw data: {p}. Use --rep N for a new repeat.")
+            sys.exit(1)
+
+
 def check_preflight(variant=None):
     global DUT_CONTAINER, REF_CONTAINER, IPC_CONTAINER
-    if variant == "ipc":
-        IPC_CONTAINER = get_container(DUT_ID, "config_c_ipc", "config_c_ipc")
-        dut_for_preflight = IPC_CONTAINER
+    if variant in VARIANTS:
+        vinfo = VARIANTS[variant]
+        container = get_container(DUT_ID, vinfo["grep"], vinfo["default_container"])
+        if vinfo["kind"] == "ipc":
+            IPC_CONTAINER = container
+        else:
+            DUT_CONTAINER = container
+        dut_for_preflight = container
     else:
         DUT_CONTAINER = get_container(DUT_ID, "pin_test", "tmp-pin_test-main-1")
         dut_for_preflight = DUT_CONTAINER
     REF_CONTAINER = get_container(REF_ID, "referee_bench", "home-arduino-arduinoapps-referee_bench-main-1")
+
+    if variant in ("ipc", "b2") and "tuned" in dut_for_preflight:
+        print(f"ERROR: variant {variant} but DUT container {dut_for_preflight} is a tuned app")
+        sys.exit(1)
+    if variant in ("ipct", "b2t") and "tuned" not in dut_for_preflight:
+        print(f"ERROR: variant {variant} but DUT container {dut_for_preflight} is not a tuned app")
+        sys.exit(1)
 
     print("=" * 75)
     print(" DUAL-PERSPECTIVE REAL-TIME BENCHMARK: DWT vs HARDWARE REFEREE")
@@ -47,30 +106,46 @@ def check_preflight(variant=None):
     # 1. Check Board 1 DWT status
     print("[Pre-flight 1/2] Checking Board 1 (DUT) Cortex-M33 DWT status...")
     dwt_check = run_adb(DUT_ID, f"docker exec {dut_for_preflight} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('check_dwt_status', 0))\"")
+    dwt_ok = False
     try:
         cycles_in_50us = int(dwt_check)
         if cycles_in_50us > 0:
+            dwt_ok = True
             freq_mhz = cycles_in_50us / 50.0
             print(f"  -> DWT ACTIVE! Elapsed: {cycles_in_50us} cycles in 50 us (~{freq_mhz:.1f} MHz)")
         else:
             print(f"  -> WARNING: DWT returned non-positive value: {dwt_check}")
     except Exception as e:
         print(f"  -> Could not parse DWT check response: {dwt_check} ({e})")
+    if variant in VARIANTS and not dwt_ok:
+        print(f"ERROR: DUT DWT check failed (response '{dwt_check}'). Is the {variant} app running on the DUT?")
+        sys.exit(1)
 
     # 2. Check Board 2 Referee status
     print("[Pre-flight 2/2] Checking Board 2 (Referee) status...")
     ref_status = run_adb(REF_ID, f"docker exec {REF_CONTAINER} cat /tmp/referee_status")
     print(f"  -> Referee status: {ref_status}")
+    if variant in VARIANTS and not ref_status:
+        print("ERROR: no referee status. Is referee_bench running on the referee board?")
+        sys.exit(1)
     print("-" * 75)
 
-def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None):
-    dut = IPC_CONTAINER if variant == "ipc" else DUT_CONTAINER
-    raw_dir = {None: RAW_DIR, "b2": RAW_DIR / "baseline_dwtref", "ipc": RAW_DIR / "ipc"}[variant]
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    std_tag = {None: str(stress_pct), "b2": f"{stress_pct}_b2", "ipc": f"{stress_pct}_ipc"}[variant]
+
+def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None, rep=1):
+    is_ipc = variant in VARIANTS and VARIANTS[variant]["kind"] == "ipc"
+    dut = IPC_CONTAINER if is_ipc else DUT_CONTAINER
+    if variant is None:
+        raw_dir = RAW_DIR
+        std_tag = str(stress_pct)
+    else:
+        raw_dir = _variant_raw_dir(variant, rep)
+        std_tag = f"{stress_pct}{VARIANTS[variant]['tag_suffix']}"
 
     if tag is None:
         tag = std_tag
+    if variant is not None:
+        refuse_overwrite(raw_dir, [tag])
+    raw_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n>>> EXECUTING CONFIG C RUN: count={sample_count}, stress={stress_pct}%, tag={tag}")
 
     # 1. Arm Referee
@@ -78,7 +153,7 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None)
     run_adb(REF_ID, f"docker exec {REF_CONTAINER} sh -c \"echo 'START {sample_count}' > /tmp/referee_cmd\"")
     time.sleep(0.5)
 
-    if variant == "ipc":
+    if is_ipc:
         run_adb(DUT_ID, f"docker exec {dut} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('reset_ipc', 0))\"")
         run_adb(DUT_ID, f"docker exec {dut} sh -c \"echo 'START' > /tmp/sender_cmd\"")
         time.sleep(1.0)
@@ -104,7 +179,7 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None)
     print(f"      Waiting {wait_time:.1f}s for cycle completion...")
     time.sleep(wait_time)
 
-    if variant == "ipc":
+    if is_ipc:
         run_adb(DUT_ID, f"docker exec {dut} sh -c \"echo 'STOP /home/arduino/sender_{tag}.csv' > /tmp/sender_cmd\"")
         for _ in range(20):
             time.sleep(0.5)
@@ -170,7 +245,7 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None)
     print(f"      Saved {len(dwt_cycles)} DWT records to {local_dwt_csv.name}")
     print(f"      Saved Referee records to {local_ref_csv.name}")
 
-    if variant == "ipc":
+    if is_ipc:
         print("      Fetching applied setpoints (seq_chunk) from Board 1 STM32...")
         seq_words = []
         offset = 0
@@ -289,48 +364,102 @@ def analyze_dual_data(dwt_path, ref_path, tag):
     print(f"  Final Deadline Miss Ratio (DMR): {dmr:.2f}% ({misses} / {num_cycles} misses @ 1.0 ms tolerance)")
     print("=" * 80)
 
+def _parse_cli_args(argv):
+    pos = []
+    rep = 1
+    rep_given = False
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--rep":
+            if i + 1 >= len(argv):
+                print("ERROR: --rep requires an integer >= 1")
+                sys.exit(1)
+            try:
+                rep = int(argv[i + 1])
+            except ValueError:
+                print(f"ERROR: invalid --rep value: {argv[i + 1]}")
+                sys.exit(1)
+            if rep < 1:
+                print(f"ERROR: --rep must be >= 1, got {rep}")
+                sys.exit(1)
+            rep_given = True
+            i += 2
+        elif arg.startswith("--rep="):
+            val = arg.split("=", 1)[1]
+            try:
+                rep = int(val)
+            except ValueError:
+                print(f"ERROR: invalid --rep value: {val}")
+                sys.exit(1)
+            if rep < 1:
+                print(f"ERROR: --rep must be >= 1, got {rep}")
+                sys.exit(1)
+            rep_given = True
+            i += 1
+        else:
+            pos.append(arg)
+            i += 1
+    mode = pos[0].lower() if len(pos) > 0 else "sanity"
+    count = int(pos[1]) if len(pos) > 1 else 10000
+    return mode, count, rep, rep_given
+
+
 if __name__ == "__main__":
-    mode = sys.argv[1].lower() if len(sys.argv) > 1 else "sanity"
-    count = int(sys.argv[2]) if len(sys.argv) > 2 else 10000
-    variant = "ipc" if mode.startswith("ipc") else ("b2" if mode.startswith("b2") else None)
+    mode, count, rep, rep_given = _parse_cli_args(sys.argv[1:])
+    prefix, _, submode = mode.partition("-")
+    variant = prefix if prefix in VARIANTS else None
+
+    if rep_given and variant is None:
+        print("ERROR: --rep needs a b2/ipc/b2t/ipct mode")
+        sys.exit(1)
+
+    if variant is not None:
+        sfx = VARIANTS[variant]["tag_suffix"]
+        if submode == "sanity":
+            tags = [f"sanity{sfx}"]
+        elif submode in ("0", "50", "100"):
+            tags = [f"{submode}{sfx}"]
+        elif submode == "all":
+            tags = [f"sanity{sfx}", f"0{sfx}", f"50{sfx}", f"100{sfx}"]
+        else:
+            print(f"ERROR: unknown mode '{mode}' for variant '{variant}'")
+            sys.exit(1)
+        refuse_overwrite(_variant_raw_dir(variant, rep), tags)
+
     check_preflight(variant=variant)
 
-    if mode == "sanity":
-        run_dual_benchmark(sample_count=20, stress_pct=0, tag="sanity")
-    elif mode in ("0", "baseline"):
-        run_dual_benchmark(sample_count=count, stress_pct=0, tag="0")
-    elif mode == "50":
-        run_dual_benchmark(sample_count=count, stress_pct=50, tag="50")
-    elif mode in ("100", "stress"):
-        run_dual_benchmark(sample_count=count, stress_pct=100, tag="100")
-    elif mode == "all":
-        print(f"\n>>> EXECUTING FULL CONFIG C MATRIX (0%, 50%, 100% stress, N={count})...")
-        run_dual_benchmark(sample_count=20, stress_pct=0, tag="sanity")
-        time.sleep(3.0)
-        run_dual_benchmark(sample_count=count, stress_pct=0, tag="0")
-        time.sleep(5.0)
-        run_dual_benchmark(sample_count=count, stress_pct=50, tag="50")
-        time.sleep(5.0)
-        run_dual_benchmark(sample_count=count, stress_pct=100, tag="100")
-    elif mode in ("b2-sanity", "ipc-sanity"):
-        p = variant
-        run_dual_benchmark(sample_count=20, stress_pct=0, tag=f"sanity_{p}", variant=p)
-    elif mode in ("b2-0", "ipc-0"):
-        p = variant
-        run_dual_benchmark(sample_count=count, stress_pct=0, tag=f"0_{p}", variant=p)
-    elif mode in ("b2-50", "ipc-50"):
-        p = variant
-        run_dual_benchmark(sample_count=count, stress_pct=50, tag=f"50_{p}", variant=p)
-    elif mode in ("b2-100", "ipc-100"):
-        p = variant
-        run_dual_benchmark(sample_count=count, stress_pct=100, tag=f"100_{p}", variant=p)
-    elif mode in ("b2-all", "ipc-all"):
-        p = variant
-        print(f"\n>>> EXECUTING FULL CONFIG C {p.upper()} MATRIX (0%, 50%, 100% stress, N={count})...")
-        run_dual_benchmark(sample_count=20, stress_pct=0, tag=f"sanity_{p}", variant=p)
-        time.sleep(3.0)
-        run_dual_benchmark(sample_count=count, stress_pct=0, tag=f"0_{p}", variant=p)
-        time.sleep(5.0)
-        run_dual_benchmark(sample_count=count, stress_pct=50, tag=f"50_{p}", variant=p)
-        time.sleep(5.0)
-        run_dual_benchmark(sample_count=count, stress_pct=100, tag=f"100_{p}", variant=p)
+    if variant is None:
+        if mode == "sanity":
+            run_dual_benchmark(sample_count=20, stress_pct=0, tag="sanity")
+        elif mode in ("0", "baseline"):
+            run_dual_benchmark(sample_count=count, stress_pct=0, tag="0")
+        elif mode == "50":
+            run_dual_benchmark(sample_count=count, stress_pct=50, tag="50")
+        elif mode in ("100", "stress"):
+            run_dual_benchmark(sample_count=count, stress_pct=100, tag="100")
+        elif mode == "all":
+            print(f"\n>>> EXECUTING FULL CONFIG C MATRIX (0%, 50%, 100% stress, N={count})...")
+            run_dual_benchmark(sample_count=20, stress_pct=0, tag="sanity")
+            time.sleep(3.0)
+            run_dual_benchmark(sample_count=count, stress_pct=0, tag="0")
+            time.sleep(5.0)
+            run_dual_benchmark(sample_count=count, stress_pct=50, tag="50")
+            time.sleep(5.0)
+            run_dual_benchmark(sample_count=count, stress_pct=100, tag="100")
+    else:
+        sfx = VARIANTS[variant]["tag_suffix"]
+        if submode == "sanity":
+            run_dual_benchmark(sample_count=20, stress_pct=0, tag=f"sanity{sfx}", variant=variant, rep=rep)
+        elif submode in ("0", "50", "100"):
+            stress = int(submode)
+            run_dual_benchmark(sample_count=count, stress_pct=stress, tag=f"{stress}{sfx}", variant=variant, rep=rep)
+        elif submode == "all":
+            print(f"\n>>> EXECUTING FULL CONFIG C {variant.upper()} MATRIX (0%, 50%, 100% stress, N={count}, rep={rep})...")
+            run_dual_benchmark(sample_count=20, stress_pct=0, tag=f"sanity{sfx}", variant=variant, rep=rep)
+            time.sleep(3.0)
+            run_dual_benchmark(sample_count=count, stress_pct=0, tag=f"0{sfx}", variant=variant, rep=rep)
+            time.sleep(5.0)
+            run_dual_benchmark(sample_count=count, stress_pct=50, tag=f"50{sfx}", variant=variant, rep=rep)
+            time.sleep(5.0)
+            run_dual_benchmark(sample_count=count, stress_pct=100, tag=f"100{sfx}", variant=variant, rep=rep)

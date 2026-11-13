@@ -40,7 +40,9 @@ def harness_env(tmp_path, monkeypatch):
         nonlocal dwt_calls
         recorded.append([device, cmd])
         if "check_dwt_status" in cmd:
-            return "8000"
+            return "" if getattr(mod, "_mock_dwt_empty", False) else "8000"
+        if "cat /tmp/referee_status" in cmd:
+            return "" if getattr(mod, "_mock_ref_empty", False) else "READY 0"
         if "start_zephyr_pulses" in cmd:
             return "1"
         if "get_dwt_chunk" in cmd:
@@ -161,3 +163,74 @@ def test_b2_files(harness_env):
         if len(entry) == 2 and isinstance(entry[1], str):
             assert "sender_cmd" not in entry[1]
             assert "reset_ipc" not in entry[1]
+
+
+def test_ipct_rep2_folder(harness_env):
+    mod, record, _, tmp_path = harness_env
+
+    cmds = record(sample_count=20, stress_pct=0, tag="sanity_ipc_tuned", variant="ipct", rep=2)
+
+    assert (tmp_path / "ipc_tuned_r2").exists()
+
+    cmd_strings = [entry[1] for entry in cmds if len(entry) == 2 and isinstance(entry[1], str)]
+    idx_reset = next((i for i, c in enumerate(cmd_strings) if "reset_ipc" in c), -1)
+    idx_start = next((i for i, c in enumerate(cmd_strings) if "echo 'START' > /tmp/sender_cmd" in c), -1)
+    idx_trigger = next((i for i, c in enumerate(cmd_strings) if "start_zephyr_pulses" in c), -1)
+    idx_stop = next(
+        (i for i, c in enumerate(cmd_strings) if "STOP /home/arduino/sender_sanity_ipc_tuned.csv" in c),
+        -1,
+    )
+    assert -1 < idx_reset < idx_start < idx_trigger < idx_stop
+
+    for entry in cmds:
+        if len(entry) == 2 and entry[0] == mod.DUT_ID and "docker exec" in entry[1]:
+            assert "docker exec config_c_ipc_tuned" in entry[1]
+
+
+def test_overwrite_guard(harness_env):
+    mod, _, recorded, tmp_path = harness_env
+    ipc_dir = tmp_path / "ipc"
+    ipc_dir.mkdir(parents=True, exist_ok=True)
+    (ipc_dir / "config_c_dwt_0_ipc.csv").write_text("cycle\n0\n", encoding="utf-8")
+
+    recorded.clear()
+    with pytest.raises(SystemExit):
+        mod.run_dual_benchmark(sample_count=20, stress_pct=0, tag="0_ipc", variant="ipc")
+    assert len(recorded) == 0
+
+
+def test_container_mismatch(harness_env, monkeypatch):
+    mod, _, _, _ = harness_env
+    monkeypatch.setattr(mod, "get_container", lambda device, pattern, default: "config_c_ipc_tuned-main-1")
+    with pytest.raises(SystemExit):
+        mod.check_preflight(variant="ipc")
+
+
+def test_b2t_files(harness_env):
+    mod, record, _, tmp_path = harness_env
+    mod._mock_dwt_100_200 = True
+
+    cmds = record(sample_count=20, stress_pct=50, tag="50_b2_tuned", variant="b2t")
+
+    b2t_csv = tmp_path / "baseline_tuned" / "C_50_b2_tuned.csv"
+    assert b2t_csv.exists(), f"Expected {b2t_csv} to exist"
+
+    for entry in cmds:
+        if len(entry) == 2 and isinstance(entry[1], str):
+            assert "sender_cmd" not in entry[1]
+            assert "reset_ipc" not in entry[1]
+
+
+def test_preflight_aborts_without_dut(harness_env):
+    mod, _, _, _ = harness_env
+    mod._mock_dwt_empty = True
+    with pytest.raises(SystemExit):
+        mod.check_preflight(variant="b2")
+    mod.check_preflight(variant=None)
+
+
+def test_preflight_aborts_without_referee(harness_env):
+    mod, _, _, _ = harness_env
+    mod._mock_ref_empty = True
+    with pytest.raises(SystemExit):
+        mod.check_preflight(variant="ipc")

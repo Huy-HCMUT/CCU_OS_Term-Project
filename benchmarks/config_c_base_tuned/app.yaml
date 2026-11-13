@@ -1,0 +1,9 @@
+name: config_c_base_tuned
+description: Config C baseline (no IPC), loop thread priority 4 (above RouterBridge thread 5)
+icon: ⏫
+profiles:
+  default:
+    platforms:
+      - platform: arduino:zephyr
+default_profile: default
+

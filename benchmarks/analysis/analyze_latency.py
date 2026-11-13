@@ -76,6 +76,7 @@ TAG_LABELS = {
     "dwt": "DWT",
     "referee": "referee board",
     "b2": "re-run, DWT referee",
+    "tuned": "loop above bridge",
 }
 REPEAT_RE = re.compile(r"(?:^|[_-])(?:run|rep)\d+$", re.IGNORECASE)
 SURFACE = "#ffffff"
