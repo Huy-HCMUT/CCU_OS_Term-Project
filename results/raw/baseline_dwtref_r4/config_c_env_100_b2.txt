@@ -1,0 +1,3 @@
+# Linux-side load samples on the DUT for tag 100_b2 (stress 100%). busy = 1 - d(idle+iowait)/d(total) over 1 s from /proc/stat.
+sample=start time=2026-11-14T23:47:07 stress_ng_procs=8 busy_cpu=25.9 busy_cpu0=100.0 busy_cpu1=2.0 busy_cpu2=0.0 busy_cpu3=1.0 loadavg=1.71/1.70/1.56 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=2016000,2016000,2016000,2016000
+sample=mid time=2026-11-14T23:48:02 stress_ng_procs=8 busy_cpu=31.3 busy_cpu0=100.0 busy_cpu1=7.8 busy_cpu2=6.9 busy_cpu3=10.0 loadavg=5.16/2.67/1.90 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=2016000,2016000,2016000,2016000
