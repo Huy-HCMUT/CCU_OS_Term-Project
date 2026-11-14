@@ -1,0 +1,48 @@
+# Config C Periodic Pulse-Displacement Pattern
+
+| file | n_intervals | median_period_us | n_disturbed | gap_set | late_dev_median_us | undisturbed_dev_std_us | amp11_us | amp13_control_us |
+| :--- | ---: | ---: | ---: | :--- | ---: | ---: | ---: | ---: |
+| raw/config_c_dwt_0.csv | 9999 | 10005.031 | 0 |  |  | 3.44 | 7.8 | 0.0 |
+| raw/config_c_dwt_100.csv | 9999 | 10005.250 | 1818 | 1;10 | 47.2 | 0.61 | 46.3 | 0.1 |
+| raw/config_c_dwt_50.csv | 9999 | 10005.212 | 1818 | 1;10 | 42.2 | 0.77 | 41.7 | 0.1 |
+| baseline_dwtref/config_c_dwt_0_b2.csv | 9999 | 10005.212 | 1818 | 1;10 | 52.7 | 0.69 | 52.2 | 0.1 |
+| baseline_dwtref/config_c_dwt_100_b2.csv | 9999 | 10005.481 | 1818 | 1;10 | 48.9 | 0.71 | 48.5 | 0.1 |
+| baseline_dwtref/config_c_dwt_50_b2.csv | 9999 | 10005.212 | 1818 | 1;10 | 52.7 | 0.69 | 52.3 | 0.1 |
+| baseline_dwtref_r2/config_c_dwt_0_b2.csv | 9999 | 10005.350 | 0 |  |  | 0.84 | 1.4 | 0.0 |
+| baseline_dwtref_r2/config_c_dwt_100_b2.csv | 9999 | 10005.231 | 1818 | 1;10 | 49.4 | 0.66 | 49.0 | 0.1 |
+| baseline_dwtref_r2/config_c_dwt_50_b2.csv | 9999 | 10005.469 | 1818 | 1;10 | 30.5 | 0.71 | 30.0 | 0.0 |
+| baseline_dwtref_r3/config_c_dwt_0_b2.csv | 9999 | 10005.200 | 0 |  |  | 7.29 | 17.0 | 0.0 |
+| baseline_dwtref_r3/config_c_dwt_100_b2.csv | 9999 | 10005.375 | 1818 | 1;10 | 51.2 | 0.69 | 50.6 | 0.1 |
+| baseline_dwtref_r3/config_c_dwt_50_b2.csv | 9999 | 10005.212 | 1818 | 1;10 | 52.7 | 0.69 | 52.2 | 0.1 |
+| baseline_dwtref_r4/config_c_dwt_0_b2.csv | 9999 | 10005.244 | 0 |  |  | 0.83 | 1.0 | 0.0 |
+| baseline_dwtref_r4/config_c_dwt_100_b2.csv | 9999 | 10005.481 | 0 |  |  | 3.22 | 7.4 | 0.0 |
+| baseline_dwtref_r4/config_c_dwt_50_b2.csv | 9999 | 10005.487 | 0 |  |  | 0.70 | 1.2 | 0.0 |
+| ipc/config_c_dwt_0_ipc.csv | 9999 | 10005.244 | 210 | 1;16;33;50;67;76;93;101;110;127;144;161;178;195;212;238;306;323;357;374;408;425;519 | 285.6 | 0.96 | 3.2 | 2.8 |
+| ipc/config_c_dwt_100_ipc.csv | 9999 | 10005.219 | 2055 | 1;2;3;4;5;6;7;8;9;10;11;16;17;18;19;20;21;22;25;26;27;28;29;30;35;36;38;44;53;70;78 | 52.2 | 0.94 | 2.0 | 3.6 |
+| ipc/config_c_dwt_50_ipc.csv | 9999 | 10005.219 | 1946 | 1;2;3;4;5;6;7;8;9;10;11;12;16;17;18;19;20;21;25;26;27;28;29;33;34;35;36;37;39;42;43;44;53;62;78;93 | 53.6 | 0.86 | 3.2 | 2.7 |
+| ipc_r2/config_c_dwt_0_ipc.csv | 9999 | 10005.212 | 246 | 1;16;33;50;67;76;84;93;101;110;127;144;161;178;195;212;238;255;289;306;340;536 | 283.3 | 1.01 | 2.3 | 3.3 |
+| ipc_r2/config_c_dwt_100_ipc.csv | 9999 | 10005.219 | 1985 | 1;2;3;4;5;6;7;8;9;10;11;16;17;18;19;20;21;22;25;26;27;28;29;30;34;35;36;37;38;39;42;43;44;45 | 52.3 | 0.87 | 2.6 | 2.6 |
+| ipc_r2/config_c_dwt_50_ipc.csv | 9999 | 10005.219 | 1931 | 1;2;3;4;5;6;7;8;9;10;11;16;17;18;19;20;21;25;26;27;28;29;30;34;35;36;37;43;44;53;59;61;62;70 | 52.2 | 0.83 | 2.6 | 3.3 |
+| ipc_r3/config_c_dwt_0_ipc.csv | 9999 | 10005.244 | 212 | 1;16;33;42;50;59;67;76;84;93;101;110;118;127;144;161;178;195;212;306;323;502;519;647 | 289.6 | 0.92 | 2.5 | 3.1 |
+| ipc_r3/config_c_dwt_100_ipc.csv | 9999 | 10005.219 | 1952 | 1;2;3;4;5;6;7;8;9;10;11;12;16;17;18;19;20;21;25;26;27;28;30;33;34;35;36;38;45;47;52;53;54;55;59;86 | 52.2 | 0.85 | 4.4 | 3.9 |
+| ipc_r3/config_c_dwt_50_ipc.csv | 9999 | 10005.112 | 279 | 1;16;33;50;59;67;68;76;84;93;101;110;118;127;135;144;161;178;195;212;246;280;323;519 | 313.4 | 2.78 | 1.9 | 4.1 |
+| baseline_tuned/config_c_dwt_0_b2_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.41 | 0.0 | 0.0 |
+| baseline_tuned/config_c_dwt_100_b2_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.46 | 0.0 | 0.0 |
+| baseline_tuned/config_c_dwt_50_b2_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.45 | 0.0 | 0.0 |
+| baseline_tuned_r2/config_c_dwt_0_b2_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.47 | 0.0 | 0.0 |
+| baseline_tuned_r2/config_c_dwt_100_b2_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.51 | 0.0 | 0.0 |
+| baseline_tuned_r2/config_c_dwt_50_b2_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.51 | 0.0 | 0.0 |
+| baseline_tuned_r3/config_c_dwt_0_b2_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.45 | 0.0 | 0.0 |
+| baseline_tuned_r3/config_c_dwt_100_b2_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.50 | 0.0 | 0.0 |
+| baseline_tuned_r3/config_c_dwt_50_b2_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.38 | 0.0 | 0.0 |
+| ipc_tuned/config_c_dwt_0_ipc_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.61 | 0.0 | 0.0 |
+| ipc_tuned/config_c_dwt_100_ipc_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.48 | 0.0 | 0.0 |
+| ipc_tuned/config_c_dwt_50_ipc_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.49 | 0.0 | 0.0 |
+| ipc_tuned_r2/config_c_dwt_0_ipc_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.55 | 0.0 | 0.0 |
+| ipc_tuned_r2/config_c_dwt_100_ipc_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.50 | 0.0 | 0.0 |
+| ipc_tuned_r2/config_c_dwt_50_ipc_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.51 | 0.0 | 0.0 |
+| ipc_tuned_r3/config_c_dwt_0_ipc_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.55 | 0.0 | 0.0 |
+| ipc_tuned_r3/config_c_dwt_100_ipc_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.47 | 0.0 | 0.0 |
+| ipc_tuned_r3/config_c_dwt_50_ipc_tuned.csv | 9999 | 10002.812 | 0 |  |  | 0.61 | 0.0 | 0.0 |
+
+Note: `amp11_us` (phase-folded amplitude, period 11) is meaningful for baseline runs only; it is not meaningful for IPC runs because message arrivals reset the bridge thread's poll phase.

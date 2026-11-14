@@ -35,12 +35,16 @@ def test_pulse_pattern_disturbed_and_clean(tmp_path):
     assert res_dist["n_disturbed"] == 180
     assert res_dist["gap_set"] == "1;10"
     assert res_dist["late_dev_median_us"] == "50.0"
+    assert float(res_dist["amp11_us"]) == pytest.approx(50.0, abs=1.0)
+    assert float(res_dist["amp13_control_us"]) < 2.0
 
     res_clean = analyze_dwt_file(clean_csv)
     assert res_clean["n_intervals"] == 1000
     assert res_clean["n_disturbed"] == 0
     assert res_clean["gap_set"] == ""
     assert res_clean["late_dev_median_us"] == ""
+    assert res_clean["amp11_us"] == "0.0"
+    assert res_clean["amp13_control_us"] == "0.0"
 
     out_md = tmp_path / "pulse_pattern.md"
     run([tmp_path], out_md)

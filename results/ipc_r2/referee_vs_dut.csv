@@ -1,0 +1,5 @@
+tag,referee_clock,n_dut,n_ref,dut_period_mean_us,ref_period_mean_us,ref_vs_dut_ppm,ref_period_std_us,ref_max_abs_jitter_us,ref_misses
+0_ipc,dwt,9999,9999,10005.3938,10005.4011,0.7233,58.0257,741.4000,0
+100_ipc,dwt,9999,9999,10005.3986,10005.4504,5.1730,65.5521,789.0750,0
+50_ipc,dwt,9999,9999,10005.4039,10005.4426,3.8625,67.8037,792.3563,0
+sanity_ipc,dwt,19,19,10005.3217,10005.3253,0.3616,0.7358,7.0187,0

@@ -1,0 +1,15 @@
+# Config C IPC Telemetry Summary
+
+| tag | cycles | sent | sent_ok | send_errors | skipped_slots | rx_count | first_cycle_with_ipc | distinct_applied | unobserved_ok | setpoint_mismatch | age_p50_cyc | age_p99_cyc | age_max_cyc | rtt_p50_us | rtt_p99_us | rtt_max_us |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0_ipc_tuned | 10000 | 1251 | 1251 | 0 | 0 | 1251 | 0 | 1174 | 0 | 0 | 4.0000 | 8.0000 | 8.0000 | 8688.8000 | 12936.5000 | 14315.6000 |
+| 100_ipc_tuned | 10000 | 1277 | 1277 | 0 | 0 | 1277 | 0 | 1174 | 0 | 0 | 4.0000 | 8.0000 | 8.0000 | 8460.6000 | 12933.9320 | 14132.3000 |
+| 50_ipc_tuned | 10000 | 1278 | 1278 | 0 | 0 | 1278 | 0 | 1174 | 0 | 0 | 4.0000 | 8.0000 | 8.0000 | 8310.3500 | 12658.1000 | 15598.0000 |
+| sanity_ipc_tuned | 20 | 83 | 83 | 0 | 0 | 83 | 0 | 3 | 0 | 0 | 3.0000 | 7.0000 | 7.0000 | 7512.3000 | 9241.4080 | 11956.1000 |
+
+### Observations & Flags
+
+- **Tag `0_ipc_tuned`:** Clean execution (0 errors, 0 mismatches, IPC active from cycle 0).
+- **Tag `100_ipc_tuned`:** Clean execution (0 errors, 0 mismatches, IPC active from cycle 0).
+- **Tag `50_ipc_tuned`:** Clean execution (0 errors, 0 mismatches, IPC active from cycle 0).
+- **Tag `sanity_ipc_tuned`:** Clean execution (0 errors, 0 mismatches, IPC active from cycle 0).

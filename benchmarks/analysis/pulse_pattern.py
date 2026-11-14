@@ -19,7 +19,21 @@ COLUMNS = [
     "gap_set",
     "late_dev_median_us",
     "undisturbed_dev_std_us",
+    "amp11_us",
+    "amp13_control_us",
 ]
+
+
+def phase_folded_amp_us(dev_us: np.ndarray, period: int) -> float:
+    """Phase-folded amplitude (max - min) / 2 of mean deviation per position k mod period."""
+    means = [
+        float(np.mean(dev_us[k::period]))
+        for k in range(period)
+        if dev_us[k::period].size > 0
+    ]
+    if len(means) < 2:
+        return 0.0
+    return (max(means) - min(means)) / 2.0
 
 
 def analyze_dwt_file(path: Path, label: str | None = None) -> dict[str, str | int]:
@@ -60,6 +74,8 @@ def analyze_dwt_file(path: Path, label: str | None = None) -> dict[str, str | in
         "gap_set": gap_set,
         "late_dev_median_us": late_dev_median_us,
         "undisturbed_dev_std_us": undisturbed_dev_std_us,
+        "amp11_us": f"{phase_folded_amp_us(dev_us, 11):.1f}",
+        "amp13_control_us": f"{phase_folded_amp_us(dev_us, 13):.1f}",
     }
 
 
@@ -85,10 +101,15 @@ def format_markdown_table(rows: list[dict[str, str | int]]) -> str:
         "# Config C Periodic Pulse-Displacement Pattern",
         "",
         "| " + " | ".join(COLUMNS) + " |",
-        "| :--- | ---: | ---: | ---: | :--- | ---: | ---: |",
+        "| :--- | ---: | ---: | ---: | :--- | ---: | ---: | ---: | ---: |",
     ]
     for r in rows:
         lines.append("| " + " | ".join(str(r[c]) for c in COLUMNS) + " |")
+    lines.append("")
+    lines.append(
+        "Note: `amp11_us` (phase-folded amplitude, period 11) is meaningful for baseline runs only; "
+        "it is not meaningful for IPC runs because message arrivals reset the bridge thread's poll phase."
+    )
     lines.append("")
     return "\n".join(lines)
 
