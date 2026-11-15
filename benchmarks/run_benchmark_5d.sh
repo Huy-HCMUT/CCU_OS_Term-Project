@@ -158,8 +158,9 @@ sample_env() {
     )"
 
     loadavg="$(awk '{printf "%s/%s/%s", $1, $2, $3}' /proc/loadavg)"
-    gov="$(paste -sd, /sys/devices/system/cpu/cpu[0-3]/cpufreq/scaling_governor 2>/dev/null || true)"
-    freq="$(paste -sd, /sys/devices/system/cpu/cpu[0-3]/cpufreq/scaling_cur_freq 2>/dev/null || true)"
+    # cat first, then paste: "paste -s" with several files prints one line per file.
+    gov="$(cat /sys/devices/system/cpu/cpu[0-3]/cpufreq/scaling_governor 2>/dev/null | paste -sd, - || true)"
+    freq="$(cat /sys/devices/system/cpu/cpu[0-3]/cpufreq/scaling_cur_freq 2>/dev/null | paste -sd, - || true)"
     temp_max="$(awk 'BEGIN { max = -1 } /^[0-9]+$/ { if ($1 + 0 > max) max = $1 + 0 } END { if (max >= 0) printf "%.1f", max / 1000.0 }' /sys/class/thermal/thermal_zone*/temp 2>/dev/null || true)"
 
     echo "sample=${label} time=${ts} stress_ng_procs=${procs} ${busy_str} loadavg=${loadavg} governor=${gov} cur_freq_khz=${freq} temp_max_c=${temp_max}" >> "${out_file}"
