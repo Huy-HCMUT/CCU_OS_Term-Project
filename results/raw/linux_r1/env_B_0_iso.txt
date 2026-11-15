@@ -1,0 +1,15 @@
+# irqs_moved=55 of 95
+sample=start time=2026-11-15T10:13:58 stress_ng_procs=0 busy_cpu=0.7 busy_cpu0=0.0 busy_cpu1=0.0 busy_cpu2=2.0 busy_cpu3=0.0 loadavg=6.30/5.58/3.27 governor=performance
+performance
+performance
+performance cur_freq_khz=2016000
+2016000
+2016000
+2016000 temp_max_c=52.5
+sample=mid time=2026-11-15T10:14:49 stress_ng_procs=0 busy_cpu=0.2 busy_cpu0=1.0 busy_cpu1=0.0 busy_cpu2=1.0 busy_cpu3=0.0 loadavg=2.73/4.72/3.10 governor=performance
+performance
+performance
+performance cur_freq_khz=2016000
+2016000
+2016000
+2016000 temp_max_c=48.1

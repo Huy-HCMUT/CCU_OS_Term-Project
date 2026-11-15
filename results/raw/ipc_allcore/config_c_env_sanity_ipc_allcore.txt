@@ -1,0 +1,3 @@
+# Linux-side load samples on the DUT for tag sanity_ipc_allcore (stress 0%). busy = 1 - d(idle+iowait)/d(total) over 1 s from /proc/stat.
+sample=start time=2026-11-15T23:17:34 stress_ng_procs=0 busy_cpu=7.2 busy_cpu0=7.9 busy_cpu1=3.0 busy_cpu2=6.9 busy_cpu3=11.8 loadavg=1.12/1.74/1.36 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=1420800,1420800,1420800,2016000 temp_max_c=40.5
+sample=mid time=2026-11-15T23:17:39 stress_ng_procs=0 busy_cpu=2.8 busy_cpu0=4.0 busy_cpu1=1.0 busy_cpu2=4.0 busy_cpu3=2.9 loadavg=1.03/1.71/1.35 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=1305600,1305600,1305600,1305600 temp_max_c=40.5
