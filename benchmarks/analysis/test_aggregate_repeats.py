@@ -4,10 +4,15 @@ import pandas as pd
 from aggregate_repeats import aggregate
 
 
-def _write_summary_csv(folder: Path, wcl_0: float, sigma_0: float = 10.0) -> None:
+def _write_summary_csv(
+    folder: Path,
+    wcl_0: float,
+    sigma_0: float = 10.0,
+    stresses: tuple[int, ...] = (0, 50, 100),
+) -> None:
     folder.mkdir(parents=True, exist_ok=True)
     rows = []
-    for stress in (0, 50, 100):
+    for stress in stresses:
         rows.append(
             {
                 "series": "C-test",
@@ -45,6 +50,7 @@ def test_aggregate_repeats_exact_match_and_missing(tmp_path):
     _write_summary_csv(res_dir / "baseline_dwtref_r2", wcl_0=70.0, sigma_0=20.0)
     _write_summary_csv(res_dir / "ipc", wcl_0=700.0, sigma_0=40.0)
     _write_summary_csv(res_dir / "ipc_tuned", wcl_0=18.0, sigma_0=3.0)
+    _write_summary_csv(res_dir / "ipc_tuned_allcore", wcl_0=20.0, sigma_0=4.0, stresses=(100,))
 
     long_df, md_text = aggregate(res_dir, out_dir)
 
@@ -57,9 +63,14 @@ def test_aggregate_repeats_exact_match_and_missing(tmp_path):
     ipc_rows = long_df[(long_df["variant"] == "IPC, stock") & (long_df["stress_pct"] == 0)]
     assert len(ipc_rows) == 1
 
+    ac_rows = long_df[long_df["variant"] == "IPC, tuned, all-core"]
+    assert len(ac_rows) == 1
+    assert int(ac_rows.iloc[0]["stress_pct"]) == 100
+
     assert "| baseline, stock | 0% | 2 | 15.0 [10.0–20.0] | 58.0 [48.0–68.0] | 60.0 [50.0–70.0] | 0.00 | 0.05 [0.05–0.05] |" in md_text
     assert "| IPC, stock | 0% | 1 |" in md_text
     assert "| IPC, tuned | 0% | 1 |" in md_text
+    assert "| IPC, tuned, all-core | 100% | 1 |" in md_text
     assert "baseline, tuned" in md_text
     assert "not run" in md_text
 

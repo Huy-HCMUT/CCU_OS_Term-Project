@@ -162,7 +162,8 @@ ENV_CMD = (
     "echo '#PG'; pgrep -c stress-ng; echo '#S1'; grep '^cpu' /proc/stat; sleep 1; "
     "echo '#S2'; grep '^cpu' /proc/stat; echo '#LA'; cat /proc/loadavg; "
     "echo '#GOV'; cat /sys/devices/system/cpu/cpu[0-3]/cpufreq/scaling_governor; "
-    "echo '#FREQ'; cat /sys/devices/system/cpu/cpu[0-3]/cpufreq/scaling_cur_freq; echo '#END'"
+    "echo '#FREQ'; cat /sys/devices/system/cpu/cpu[0-3]/cpufreq/scaling_cur_freq; "
+    "echo '#TEMP'; cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null; echo '#END'"
 )
 
 
@@ -198,12 +199,20 @@ def _parse_env(text):
             d = [y - x for x, y in zip(a, s2[name])]
             total = sum(d)
             busy[name] = round(100.0 * (total - d[3] - d[4]) / total, 1) if total > 0 else float("nan")
+        temps = []
+        for tline in sections.get("TEMP", []):
+            try:
+                temps.append(int(tline))
+            except ValueError:
+                pass
+        temp_max_c = round(max(temps) / 1000.0, 1) if temps else ""
         return {
             "stress_ng_procs": int(sections["PG"][0]),
             "busy_pct": busy,
             "loadavg": " ".join(sections["LA"][0].split()[:3]),
             "governor": ",".join(sections["GOV"]),
             "cur_freq_khz": ",".join(sections["FREQ"]),
+            "temp_max_c": temp_max_c,
         }
     except (KeyError, IndexError, ValueError):
         return None
@@ -230,21 +239,28 @@ def _sample_env(label):
 def _format_env(env):
     busy = " ".join(f"busy_{k}={v}" for k, v in env["busy_pct"].items())
     return (f"sample={env['sample']} time={env['time']} stress_ng_procs={env['stress_ng_procs']} {busy} "
-            f"loadavg={env['loadavg'].replace(' ', '/')} governor={env['governor']} cur_freq_khz={env['cur_freq_khz']}")
+            f"loadavg={env['loadavg'].replace(' ', '/')} governor={env['governor']} "
+            f"cur_freq_khz={env['cur_freq_khz']} temp_max_c={env.get('temp_max_c', '')}")
 
 
-def _stress_state_problem(env, stress_pct):
-    """None if the number of stress-ng processes fits the stress level, else a message."""
+def _stress_state_problem(env, stress_pct, load="core0"):
+    """None if the number of stress-ng processes (and core load for allcore) fits, else a message."""
     if stress_pct > 0 and env["stress_ng_procs"] == 0:
         return f"stress-ng is not running during the {stress_pct}% level"
     if stress_pct == 0 and env["stress_ng_procs"] > 0:
         return (f"stress-ng is running during a 0% level ({env['stress_ng_procs']} processes, "
                 "probably left over from an earlier run)")
+    if load == "allcore":
+        least_busy = min(env["busy_pct"].get(f"cpu{i}", 0.0) for i in range(4))
+        if least_busy < 70.0:
+            return f"all-core load not reached (least busy core {least_busy} %)"
     return None
 
 
-def _variant_raw_dir(variant, rep=1):
+def _variant_raw_dir(variant, rep=1, load="core0"):
     base = VARIANTS[variant]["raw_base"]
+    if load == "allcore":
+        base = f"{base}_allcore"
     return RAW_DIR / (base if rep == 1 else f"{base}_r{rep}")
 
 
@@ -313,15 +329,25 @@ def check_preflight(variant=None):
     print("-" * 75)
 
 
-def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None, rep=1):
+def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None, rep=1, load="core0", folder_load=None):
+    if load not in ("core0", "allcore"):
+        print(f"ERROR: invalid load '{load}'")
+        sys.exit(1)
+    if load == "allcore" and (variant not in VARIANTS or stress_pct != 100):
+        print("ERROR: load='allcore' requires a variant and stress_pct=100")
+        sys.exit(1)
+    if folder_load is None:
+        folder_load = load
+
     is_ipc = variant in VARIANTS and VARIANTS[variant]["kind"] == "ipc"
     dut = IPC_CONTAINER if is_ipc else DUT_CONTAINER
     if variant is None:
         raw_dir = RAW_DIR
         std_tag = str(stress_pct)
     else:
-        raw_dir = _variant_raw_dir(variant, rep)
-        std_tag = f"{stress_pct}{VARIANTS[variant]['tag_suffix']}"
+        raw_dir = _variant_raw_dir(variant, rep, load=folder_load)
+        tag_sfx = VARIANTS[variant]["tag_suffix"] + ("_allcore" if load == "allcore" else "")
+        std_tag = f"{stress_pct}{tag_sfx}"
 
     if tag is None:
         tag = std_tag
@@ -352,7 +378,11 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
         run_adb(DUT_ID, f"docker exec {dut} sh -c \"echo 'START' > /tmp/sender_cmd\"")
         time.sleep(1.0)
 
-    if stress_pct == 50:
+    if load == "allcore":
+        print("[2/5] Starting ALL-CORE Linux stress on Board 1 (stress-ng, 4 CPU workers, not pinned)...")
+        subprocess.Popen([ADB, "-s", DUT_ID, "shell", "stress-ng --cpu 4 --cache 2 --hdd 1 --vm 1 --vm-bytes 50% --quiet"])
+        time.sleep(2.0)
+    elif stress_pct == 50:
         print("[2/5] Starting 50% Linux CPU, IO & Memory stress on Board 1 (stress-ng)...")
         subprocess.Popen([ADB, "-s", DUT_ID, "shell", "stress-ng --cpu 1 --taskset 0 --hdd 1 --vm 1 --vm-bytes 25% --quiet"])
         time.sleep(2.0)
@@ -368,7 +398,7 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
         env = _sample_env("start")
         if env is None:
             _abort_run("could not read the Linux load state on the DUT (adb?).", dut, tag, stress_pct, is_ipc)
-        problem = _stress_state_problem(env, stress_pct)
+        problem = _stress_state_problem(env, stress_pct, load=load)
         if problem:
             _abort_run(problem + ".", dut, tag, stress_pct, is_ipc, kill_stress=True)
         env_samples.append(env)
@@ -530,7 +560,7 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
         problems = []
         for e in env_samples:
             if e["sample"] == "mid":
-                p = _stress_state_problem(e, stress_pct)
+                p = _stress_state_problem(e, stress_pct, load=load)
                 if p:
                     problems.append(f"mid-run: {p}")
         if len(dwt_cycles) != sample_count:
@@ -546,7 +576,7 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
             if _count_csv_rows(local_sender_csv) < 1:
                 problems.append("sender CSV empty or missing")
         if problems:
-            level = "sanity" if tag.startswith("sanity") else str(stress_pct)
+            level = "allcore" if load == "allcore" else ("sanity" if tag.startswith("sanity") else str(stress_pct))
             rep_arg = f" --rep {rep}" if rep != 1 else ""
             print(f"ERROR: incomplete data for tag {tag} in {raw_dir}: {', '.join(problems)}.")
             print("       The files were kept. Ask Claude to move this tag's files to results/raw/archive/,")
@@ -659,16 +689,20 @@ if __name__ == "__main__":
 
     if variant is not None:
         sfx = VARIANTS[variant]["tag_suffix"]
+        target_load = "core0"
         if submode == "sanity":
             tags = [f"sanity{sfx}"]
         elif submode in ("0", "50", "100"):
             tags = [f"{submode}{sfx}"]
         elif submode == "all":
             tags = [f"sanity{sfx}", f"0{sfx}", f"50{sfx}", f"100{sfx}"]
+        elif submode == "allcore":
+            tags = [f"sanity{sfx}_allcore", f"100{sfx}_allcore"]
+            target_load = "allcore"
         else:
             print(f"ERROR: unknown mode '{mode}' for variant '{variant}'")
             sys.exit(1)
-        refuse_overwrite(_variant_raw_dir(variant, rep), tags)
+        refuse_overwrite(_variant_raw_dir(variant, rep, load=target_load), tags)
 
     check_preflight(variant=variant)
 
@@ -706,3 +740,8 @@ if __name__ == "__main__":
             run_dual_benchmark(sample_count=count, stress_pct=50, tag=f"50{sfx}", variant=variant, rep=rep)
             time.sleep(5.0)
             run_dual_benchmark(sample_count=count, stress_pct=100, tag=f"100{sfx}", variant=variant, rep=rep)
+        elif submode == "allcore":
+            print(f"\n>>> EXECUTING CONFIG C {variant.upper()} ALL-CORE RUN (sanity + all-core stress, N={count}, rep={rep})...")
+            run_dual_benchmark(sample_count=20, stress_pct=0, tag=f"sanity{sfx}_allcore", variant=variant, rep=rep, load="core0", folder_load="allcore")
+            time.sleep(3.0)
+            run_dual_benchmark(sample_count=count, stress_pct=100, tag=f"100{sfx}_allcore", variant=variant, rep=rep, load="allcore")

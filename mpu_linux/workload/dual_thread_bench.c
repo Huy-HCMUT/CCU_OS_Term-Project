@@ -25,6 +25,7 @@
 #include <pthread.h>
 #include <sched.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/mman.h>
 #include <stdatomic.h>
@@ -170,7 +171,7 @@ static void run_control_benchmark(void) {
     uint64_t base_ns = timespec_to_ns(&start_ts);
 
     struct rusage usage_snap;
-    getrusage(RUSAGE_SELF, &usage_snap);
+    getrusage(RUSAGE_THREAD, &usage_snap);
 
     for (uint32_t k = 0; k < g_total_cycles; ++k) {
         /* Scheduled release time: R_k = t_0 + k * 10 ms */
@@ -198,7 +199,7 @@ static void run_control_benchmark(void) {
 
         /* Periodic telemetry snapshot (every 500 cycles to avoid getrusage overhead) */
         if (k % 500 == 0) {
-            getrusage(RUSAGE_SELF, &usage_snap);
+            getrusage(RUSAGE_THREAD, &usage_snap);
         }
 
         /* Buffer directly into RAM */
@@ -230,7 +231,10 @@ static void print_summary_and_save_csv(const char *config_str,
                                        int stress_level,
                                        const char *csv_output_path,
                                        const struct rusage *ru_start,
-                                       const struct rusage *ru_end) {
+                                       const struct rusage *ru_end,
+                                       int affinity_core,
+                                       int analytics_affinity_core,
+                                       int no_cstates_active) {
     uint32_t total_misses = 0;
     uint32_t total_starvations = 0;
     double sum_lateness = 0.0;
@@ -303,6 +307,8 @@ static void print_summary_and_save_csv(const char *config_str,
         return;
     }
 
+    fprintf(f, "# rusage=thread affinity=%d analytics_affinity=%d no_cstates=%d\n",
+            affinity_core, analytics_affinity_core, no_cstates_active);
     fprintf(f, "cycle,scheduled_ns,actual_wake_ns,lateness_ms,is_miss,is_starvation,setpoint,nivcsw,minflt\n");
     for (uint32_t i = 0; i < g_total_cycles; ++i) {
         fprintf(f, "%u,%llu,%llu,%.4f,%d,%d,%d,%ld,%ld\n",
@@ -325,8 +331,12 @@ int main(int argc, char **argv) {
     const char *policy_str = NULL; /* "FIFO", "RR", "OTHER" */
     int rt_priority = 90;
     bool enable_mlock = false;
-    int affinity_core = -1;        /* -1 means floating */
-    int stress_level = 0;          /* 0, 50, or 100 */
+    int affinity_core = -1;            /* -1 means floating */
+    int analytics_affinity_core = -1;  /* -1 means inherit */
+    bool enable_no_cstates = false;
+    int no_cstates_active = 0;
+    int dma_latency_fd = -1;
+    int stress_level = 0;              /* 0, 50, or 100 */
     char csv_path[512] = {0};
     const char *data_bin_path = "data/processed/cwru_test_frames.bin";
 
@@ -342,6 +352,10 @@ int main(int argc, char **argv) {
             enable_mlock = true;
         } else if (strcmp(argv[i], "--affinity") == 0 && i + 1 < argc) {
             affinity_core = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--analytics-affinity") == 0 && i + 1 < argc) {
+            analytics_affinity_core = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--no-cstates") == 0) {
+            enable_no_cstates = true;
         } else if (strcmp(argv[i], "--cycles") == 0 && i + 1 < argc) {
             g_total_cycles = (uint32_t)atoi(argv[++i]);
         } else if (strcmp(argv[i], "--stress") == 0 && i + 1 < argc) {
@@ -352,15 +366,17 @@ int main(int argc, char **argv) {
             data_bin_path = argv[++i];
         } else if (strcmp(argv[i], "--help") == 0) {
             printf("Usage: %s [OPTIONS]\n", argv[0]);
-            printf("  --config A|B         Baseline config: A (CFS) or B (SCHED_FIFO)\n");
-            printf("  --policy FIFO|RR     Explicit RT scheduling policy override\n");
-            printf("  --priority 1-99      Real-time priority (default: 90)\n");
-            printf("  --mlock              Lock all virtual pages into physical RAM (mlockall)\n");
-            printf("  --affinity 0-3       Pin process to a specific CPU core\n");
-            printf("  --cycles N           Number of 10 ms cycles (default: 10000)\n");
-            printf("  --stress 0|50|100    Metadata label for stress condition\n");
-            printf("  --out file.csv       Output CSV path\n");
-            printf("  --data file.bin      Input binary vibration frames\n");
+            printf("  --config A|B                Baseline config: A (CFS) or B (SCHED_FIFO)\n");
+            printf("  --policy FIFO|RR            Explicit RT scheduling policy override\n");
+            printf("  --priority 1-99             Real-time priority (default: 90)\n");
+            printf("  --mlock                     Lock all virtual pages into physical RAM (mlockall)\n");
+            printf("  --affinity 0-3              Pin process to a specific CPU core\n");
+            printf("  --analytics-affinity 0-3    Pin analytics thread to a specific CPU core\n");
+            printf("  --no-cstates                Limit CPU idle-state exit latency via /dev/cpu_dma_latency\n");
+            printf("  --cycles N                  Number of 10 ms cycles (default: 10000)\n");
+            printf("  --stress 0|50|100           Metadata label for stress condition\n");
+            printf("  --out file.csv              Output CSV path\n");
+            printf("  --data file.bin             Input binary vibration frames\n");
             return 0;
         }
     }
@@ -432,10 +448,29 @@ int main(int argc, char **argv) {
         }
     }
 
+    /* Limit CPU idle-state exit latency if requested (fd kept open until exit) */
+    if (enable_no_cstates) {
+        dma_latency_fd = open("/dev/cpu_dma_latency", O_WRONLY);
+        if (dma_latency_fd < 0) {
+            perror("[Warning] /dev/cpu_dma_latency");
+        } else {
+            int32_t v = 0;
+            if (write(dma_latency_fd, &v, sizeof v) != (ssize_t)sizeof v) {
+                perror("[Warning] /dev/cpu_dma_latency");
+                close(dma_latency_fd);
+                dma_latency_fd = -1;
+            } else {
+                no_cstates_active = 1;
+                printf("[PM-QoS] CPU idle-state exit latency limited to 0 us\n");
+            }
+        }
+    }
+
     /* Allocate in-memory RAM buffer */
     g_records = malloc(g_total_cycles * sizeof(cycle_record_t));
     if (!g_records) {
         fprintf(stderr, "Fatal: Failed to allocate RAM buffer for %u records\n", g_total_cycles);
+        if (dma_latency_fd >= 0) close(dma_latency_fd);
         return 1;
     }
 
@@ -472,9 +507,22 @@ int main(int argc, char **argv) {
     pthread_attr_setschedpolicy(&attr, SCHED_OTHER);
     pthread_attr_setschedparam(&attr, &analytics_param);
 
+    if (analytics_affinity_core >= 0) {
+        cpu_set_t set;
+        CPU_ZERO(&set);
+        CPU_SET(analytics_affinity_core, &set);
+        if (pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &set) != 0) {
+            perror("[Warning] pthread_attr_setaffinity_np failed");
+        } else {
+            printf("[Affinity] Analytics thread pinned to CPU core %d\n", analytics_affinity_core);
+        }
+    }
+
     if (pthread_create(&analytics_tid, &attr, analytics_thread_func, NULL) != 0) {
         perror("Failed to create analytics thread");
+        pthread_attr_destroy(&attr);
         free(g_records);
+        if (dma_latency_fd >= 0) close(dma_latency_fd);
         return 1;
     }
     pthread_attr_destroy(&attr);
@@ -491,8 +539,12 @@ int main(int argc, char **argv) {
     getrusage(RUSAGE_SELF, &ru_end);
 
     /* Compute and print results, flush CSV */
-    print_summary_and_save_csv(config_str, policy_name, stress_level, csv_path, &ru_start, &ru_end);
+    print_summary_and_save_csv(config_str, policy_name, stress_level, csv_path, &ru_start, &ru_end,
+                               affinity_core, analytics_affinity_core, no_cstates_active);
 
+    if (dma_latency_fd >= 0) {
+        close(dma_latency_fd);
+    }
     free(g_records);
     return 0;
 }

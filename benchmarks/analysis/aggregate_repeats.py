@@ -14,6 +14,10 @@ VARIANTS = [
     ("IPC, stock", "ipc"),
     ("baseline, tuned", "baseline_tuned"),
     ("IPC, tuned", "ipc_tuned"),
+    ("baseline, stock, all-core", "baseline_dwtref_allcore"),
+    ("IPC, stock, all-core", "ipc_allcore"),
+    ("baseline, tuned, all-core", "baseline_tuned_allcore"),
+    ("IPC, tuned, all-core", "ipc_tuned_allcore"),
 ]
 
 LONG_COLUMNS = [

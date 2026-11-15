@@ -40,13 +40,13 @@ def harness_env(tmp_path, monkeypatch):
     # behave like working boards: the referee goes RECORDING/STOPPED, chunks hold
     # data, and `adb pull` writes a complete file. Legacy runs keep the old mock
     # (empty replies), so the golden command list is unchanged.
-    state = {"full": False, "n": 0, "ref": "READY 0", "dwt_failed_once": False, "stress": False}
+    state = {"full": False, "n": 0, "ref": "READY 0", "dwt_failed_once": False, "stress": False, "allcore": False}
 
     def flag(name):
         return getattr(mod, name, False)
 
     def env_text():
-        """Output of the harness's ENV_CMD: stress-ng count, two /proc/stat reads, loadavg, governor, freq."""
+        """Output of the harness's ENV_CMD: stress-ng count, two /proc/stat reads, loadavg, governor, freq, temp."""
         if flag("_mock_env_fail"):
             return ""
         procs = 3 if (state["stress"] and not flag("_mock_stress_dead")) else 0
@@ -54,7 +54,11 @@ def harness_env(tmp_path, monkeypatch):
             procs = 2
         busy0 = 1000 if procs else 0          # cpu0 fully busy over the 1 s window when stress runs
         s1 = [[0, 0, 0, 1000, 0, 0, 0, 0] for _ in range(4)]
-        s2 = [[busy0, 0, 0, 1000 + (1000 - busy0), 0, 0, 0, 0]] + [[0, 0, 0, 2000, 0, 0, 0, 0] for _ in range(3)]
+        if procs and state["allcore"]:
+            busy3 = 100 if flag("_mock_cpu3_low") else 1000
+            s2 = [[1000, 0, 0, 1000, 0, 0, 0, 0] for _ in range(3)] + [[busy3, 0, 0, 1000 + (1000 - busy3), 0, 0, 0, 0]]
+        else:
+            s2 = [[busy0, 0, 0, 1000 + (1000 - busy0), 0, 0, 0, 0]] + [[0, 0, 0, 2000, 0, 0, 0, 0] for _ in range(3)]
         def block(rows):
             agg = [sum(col) for col in zip(*rows)]
             lines = ["cpu  " + " ".join(map(str, agg)) + " 0 0"]
@@ -62,7 +66,8 @@ def harness_env(tmp_path, monkeypatch):
             return "\n".join(lines)
         return "\n".join(["#PG", str(procs), "#S1", block(s1), "#S2", block(s2),
                           "#LA", "0.50 0.40 0.30 1/100 1234",
-                          "#GOV", *["schedutil"] * 4, "#FREQ", *["2016000"] * 4, "#END"])
+                          "#GOV", *["schedutil"] * 4, "#FREQ", *["2016000"] * 4,
+                          "#TEMP", "45000", "52000", "#END"])
 
     def chunk(cmd, value_of):
         m = re.search(r"chunk', (\d+)\)", cmd)
@@ -78,6 +83,7 @@ def harness_env(tmp_path, monkeypatch):
             return env_text()
         if "killall -9 stress-ng" in cmd:
             state["stress"] = False
+            state["allcore"] = False
             return ""
         if "check_dwt_status" in cmd:
             return "" if flag("_mock_dwt_empty") else "8000"
@@ -115,6 +121,7 @@ def harness_env(tmp_path, monkeypatch):
         recorded.append(["popen", args])
         if any("stress-ng" in str(x) for x in args):
             state["stress"] = True
+            state["allcore"] = not any("--taskset" in str(x) for x in args)
         return None
 
     def mock_run(args, *a, **kw):
@@ -147,6 +154,7 @@ def harness_env(tmp_path, monkeypatch):
         state["n"] = kw.get("sample_count", 0)
         state["ref"] = "READY 0"
         state["stress"] = False
+        state["allcore"] = False
         mod.check_preflight(variant=variant)
         mod.run_dual_benchmark(**kw)
         tmp_str = str(tmp_path)
@@ -470,3 +478,51 @@ def test_legacy_mode_sends_no_env_command(harness_env):
     mod, record, _, _ = harness_env
     cmds = _cmd_strings(record(sample_count=20, stress_pct=100, tag="100"))
     assert not any("/proc/stat" in c for c in cmds)
+
+
+# --- Phase 5d: all-core stress tier & temperature ---
+
+def test_allcore_run_files(harness_env):
+    mod, record, _, tmp_path = harness_env
+    cmds = record(
+        sample_count=20,
+        stress_pct=100,
+        tag="100_ipc_tuned_allcore",
+        variant="ipct",
+        rep=2,
+        load="allcore",
+    )
+    out_dir = tmp_path / "ipc_tuned_allcore_r2"
+    assert (out_dir / "C_100_ipc_tuned_allcore.csv").exists()
+    env_text = (out_dir / "config_c_env_100_ipc_tuned_allcore.txt").read_text(encoding="utf-8")
+    assert "busy_cpu3=100.0" in env_text
+    assert "temp_max_c=52.0" in env_text
+    popen_cmds = [e[1] for e in cmds if e[0] == "popen"]
+    assert len(popen_cmds) == 1
+    stress_cmd = " ".join(popen_cmds[0])
+    assert "--cpu 4" in stress_cmd
+    assert "--taskset" not in stress_cmd
+
+
+def test_allcore_load_not_reached_aborts(harness_env):
+    mod, record, recorded, tmp_path = harness_env
+    mod._mock_cpu3_low = True
+    with pytest.raises(SystemExit):
+        record(
+            sample_count=20,
+            stress_pct=100,
+            tag="100_b2_allcore",
+            variant="b2",
+            load="allcore",
+        )
+    cmds = _cmd_strings(recorded)
+    assert not any("start_zephyr_pulses" in c for c in cmds)
+    assert not (tmp_path / "baseline_dwtref_allcore" / "config_c_dwt_100_b2_allcore.csv").exists()
+
+
+def test_allcore_needs_variant_and_100(harness_env):
+    mod, _, _, _ = harness_env
+    with pytest.raises(SystemExit):
+        mod.run_dual_benchmark(sample_count=20, stress_pct=100, tag="100", variant=None, load="allcore")
+    with pytest.raises(SystemExit):
+        mod.run_dual_benchmark(sample_count=20, stress_pct=50, tag="50_b2_allcore", variant="b2", load="allcore")
