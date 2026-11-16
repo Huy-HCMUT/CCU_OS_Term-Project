@@ -1,0 +1,2 @@
+series,config,tag,stress_pct,files,format,cycles,lateness_mean_us,jitter_std_us,lateness_min_us,lateness_p50_us,lateness_p99_us,lateness_p99_9_us,wcl_max_us,misses_1000us,dmr_1000us_pct,misses_200us,dmr_200us_pct,severe_starvation_40ms,period_mean_us,period_std_us,notes
+C-ipc_allcore,C,ipc_allcore,100,C_100_ipc_allcore.csv,wake-only,10000,13.9167,38.2718,0.0000,9.9120,57.9899,656.5761,758.5836,0,0.0000,61,0.6100,0,10005.3951,53.7365,fitted period 10005.3943 us (+539.4 ppm); lateness relative to best-case cycle
