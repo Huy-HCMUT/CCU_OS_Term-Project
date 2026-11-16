@@ -363,7 +363,7 @@ def _plot_charts(records: list[dict], out_dir: Path) -> list[Path]:
         }
     )
 
-    us_fmt = FuncFormatter(lambda v, _: f"{v:g}" if v < 1e3 else f"{v / 1e3:g} ms")
+    us_fmt = FuncFormatter(lambda v, _: f"{v:g} µs" if v < 1e3 else f"{v / 1e3:g} ms")
     written: list[Path] = []
 
     def plot_cdf_tier(tier_key: str, out_name: str, title: str) -> None:
@@ -402,7 +402,7 @@ def _plot_charts(records: list[dict], out_dir: Path) -> list[Path]:
             )
         ax.xaxis.set_major_formatter(us_fmt)
         ax.set_ylim(0, 100.5)
-        ax.set_xlabel("Relative wake-up lateness (µs)")
+        ax.set_xlabel("Relative wake-up lateness")
         ax.set_ylabel("Cycles (%)")
         ax.set_title(title, fontsize=10)
         if seen_series:
@@ -449,7 +449,7 @@ def _plot_charts(records: list[dict], out_dir: Path) -> list[Path]:
     ax.set_xticks(range(len(TIERS)), [TIER_LABELS[t] for t in TIERS])
     ax.set_xlim(-0.5, len(TIERS) - 0.5)
     ax.set_xlabel("Stress tier")
-    ax.set_ylabel("Worst-case relative lateness (µs)")
+    ax.set_ylabel("Worst-case relative lateness")
     ax.set_title("Worst-case relative lateness per run across stress tiers", fontsize=10)
     if has_points:
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), fontsize=8, ncol=4)
