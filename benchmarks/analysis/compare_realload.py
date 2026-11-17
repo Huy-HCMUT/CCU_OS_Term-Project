@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase 6a analysis across realistic load tiers (R-net and R-deploy) for A, B, B-iso, and C IPC tuned."""
+"""Phase 6a/6b analysis across idle (0) and realistic load tiers (R-deploy, R-net)."""
 
 from __future__ import annotations
 
@@ -22,13 +22,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from analyze_latency import load_run  # noqa: E402
 from compare_configs import SERIES_COLORS, _fmt_range, _summarize_run  # noqa: E402
 
-SERIES_ORDER = ["A", "B", "B-iso", "C IPC tuned"]
-TIERS = ["rnet", "rdeploy"]
+SERIES_ORDER = ["A", "B", "B-iso", "C IPC tuned", "C act tuned"]
+TIERS = ["0", "rdeploy", "rnet"]
 BLOCK_SIZE = 10000
+LOCAL_SERIES_COLORS = {**SERIES_COLORS, "C act tuned": "#0f766e"}
 
 REAL_LINUX_DIR_RE = re.compile(r"^real_r(?P<rep>\d+)$")
 REAL_LINUX_FILE_RE = re.compile(r"^(?P<config>[AB])_0(?P<iso>_iso)?_(?P<tier>rnet|rdeploy)\.csv$")
 REAL_C_DIR_RE = re.compile(r"^ipc_tuned_(?P<tier>rnet|rdeploy)(?:_r(?P<rep>\d+))?$")
+ACT_DIR_RE = re.compile(r"^act_tuned(?:_(?P<tier>rnet|rdeploy))?(?:_r(?P<rep>\d+))?$")
 
 SOFTIRQ_KEYS = ("NET_RX", "NET_TX", "BLOCK", "TIMER")
 
@@ -318,6 +320,7 @@ def _collect_realload_runs(raw_dir: Path) -> list[dict]:
 
     linux_dirs: list[tuple[int, Path]] = []
     c_dirs: list[tuple[str, int, Path]] = []
+    act_dirs: list[tuple[str, int, Path]] = []
     for entry in raw_dir.iterdir():
         if not entry.is_dir():
             continue
@@ -330,6 +333,12 @@ def _collect_realload_runs(raw_dir: Path) -> list[dict]:
             tier = m_c.group("tier")
             rep = int(m_c.group("rep")) if m_c.group("rep") else 1
             c_dirs.append((tier, rep, entry))
+            continue
+        m_a = ACT_DIR_RE.fullmatch(entry.name)
+        if m_a:
+            tier = m_a.group("tier") or "0"
+            rep = int(m_a.group("rep")) if m_a.group("rep") else 1
+            act_dirs.append((tier, rep, entry))
 
     for rep, folder in sorted(linux_dirs, key=lambda x: x[0]):
         for csv_path in sorted(folder.glob("*.csv")):
@@ -385,6 +394,30 @@ def _collect_realload_runs(raw_dir: Path) -> list[dict]:
         row.update(_collect_evidence(folder, label, tier, folder / f"config_c_env_{label}.txt"))
         records.append(row)
 
+    for tier, rep, folder in sorted(act_dirs, key=lambda x: (tier_rank[x[0]], x[1])):
+        sfx = f"_{tier}" if tier != "0" else ""
+        label = f"0_act_tuned{sfx}"
+        csv_path = folder / f"C_{label}.csv"
+        if not csv_path.exists():
+            continue
+        run = load_run(csv_path, clock_hz=160e6, period_mode="fit")
+        l_rel = run.lateness_us
+        row = _summarize_run(
+            series="C act tuned",
+            tier=tier,
+            rep=rep,
+            rel_path=f"{folder.name}/{csv_path.name}",
+            l_rel=l_rel,
+            l_abs=None,
+        )
+        bw = _block_wcls(l_rel)
+        row["n_blocks"] = int(bw.size)
+        row["block_wcl_median_us"] = float(np.median(bw)) if bw.size else np.nan
+        row["block_wcl_max_us"] = float(np.max(bw)) if bw.size else np.nan
+        row["_block_wcls"] = bw
+        row.update(_collect_evidence(folder, label, tier, folder / f"config_c_env_{label}.txt"))
+        records.append(row)
+
     return records
 
 
@@ -415,12 +448,11 @@ def _build_markdown(long_df: pd.DataFrame, ref_map: dict[tuple[str, str], tuple[
     ]
 
     for series in SERIES_ORDER:
-        ref0 = ref_map.get((series, "0"), ("—", np.nan))[0]
-        ref_ac = ref_map.get((series, "allcore"), ("—", np.nan))[0]
+        ref0 = ref_map.get((series, "0"), ("–", np.nan))[0]
+        ref_ac = ref_map.get((series, "allcore"), ("–", np.nan))[0]
         for tier in TIERS:
             sub = long_df[(long_df["series"] == series) & (long_df["tier"] == tier)]
             if sub.empty:
-                lines.append(f"| {series} | {tier} | 0 | — | — | — | — | — | {ref0} | {ref_ac} |")
                 continue
             n_runs = len(sub)
             cycles = int(np.median(sub["n"].to_numpy(dtype=float)))
@@ -485,6 +517,11 @@ def _build_markdown(long_df: pd.DataFrame, ref_map: dict[tuple[str, str], tuple[
             "**CPU governor:** Linux runs lock all cores to `performance` during measurement (`run_benchmark_6r.sh`), "
             "whereas Config C runs retain the board default `schedutil` governor.",
             "",
+            "**C act tuned vs C IPC tuned (DECISIONS.md D12):** `C act tuned` equals tuned IPC plus the 500 Hz D3 "
+            "PWM write, so its idle (`0`) runs are new Phase 6b runs rather than the Phase 5d `ipc_tuned` baseline. "
+            "It stands in for `C IPC tuned` under realistic load (`rdeploy`, `rnet`) only if F1 held (otherwise "
+            "`C IPC tuned` realistic-load runs are reported separately).",
+            "",
         ]
     )
     return "\n".join(lines)
@@ -512,14 +549,14 @@ def _plot_block_wcl(records: list[dict], ref_map: dict[tuple[str, str], tuple[st
     )
 
     fig, ax = plt.subplots(figsize=(6.8, 4.2))
-    tier_offsets = {"rnet": -0.14, "rdeploy": 0.14}
-    tier_markers = {"rnet": "o", "rdeploy": "s"}
+    tier_offsets = {"0": -0.30, "rnet": -0.14, "rdeploy": 0.14}
+    tier_markers = {"0": "D", "rnet": "o", "rdeploy": "s"}
 
     seen_labels: set[str] = set()
     has_points = False
 
     for idx, series in enumerate(SERIES_ORDER):
-        color = SERIES_COLORS.get(series, "#333333")
+        color = LOCAL_SERIES_COLORS.get(series, "#333333")
         for tier in TIERS:
             pts: list[float] = []
             for r in records:

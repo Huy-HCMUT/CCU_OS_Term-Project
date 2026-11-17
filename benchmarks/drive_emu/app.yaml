@@ -1,0 +1,9 @@
+name: drive_emu
+description: "Phase 6b drive emulator (board 3): PWM speed command on D8, tick on D2"
+icon: ⚙️
+profiles:
+  default:
+    platforms:
+      - platform: arduino:zephyr
+default_profile: default
+

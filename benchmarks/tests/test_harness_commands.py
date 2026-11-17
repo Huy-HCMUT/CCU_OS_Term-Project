@@ -42,7 +42,7 @@ def harness_env(tmp_path, monkeypatch):
     # behave like working boards: the referee goes RECORDING/STOPPED, chunks hold
     # data, and `adb pull` writes a complete file. Legacy runs keep the old mock
     # (empty replies), so the golden command list is unchanged.
-    state = {"full": False, "n": 0, "ref": "READY 0", "dwt_failed_once": False, "stress": False, "allcore": False}
+    state = {"full": False, "n": 0, "ref": "READY 0", "drive": "READY 0", "dwt_failed_once": False, "stress": False, "allcore": False}
 
     def flag(name):
         return getattr(mod, name, False)
@@ -99,6 +99,16 @@ def harness_env(tmp_path, monkeypatch):
             if flag("_mock_ref_empty"):
                 return ""
             return state["ref"] if state["full"] else "READY 0"
+        if state["full"] and device == mod.DRIVE_ID and "/tmp/drive_cmd" in cmd:
+            if "echo 'START" in cmd and not flag("_mock_drive_no_record"):
+                state["drive"] = "RECORDING 0"
+            elif "echo 'STOP" in cmd:
+                state["drive"] = "STOPPED 0 /home/arduino/x.csv"
+            return ""
+        if "cat /tmp/drive_status" in cmd:
+            if flag("_mock_drive_empty"):
+                return ""
+            return state["drive"] if state["full"] else "READY 0"
         if "start_zephyr_pulses" in cmd:
             return "" if flag("_mock_trigger_fail") else "1"
         if "get_dwt_chunk" in cmd:
@@ -114,9 +124,25 @@ def harness_env(tmp_path, monkeypatch):
                 return "100,200" if dwt_calls == 1 else ""
             return ""
         if "get_seq_chunk" in cmd:
-            return chunk(cmd, lambda i: (1 << 8) | 100) if state["full"] else ""
+            if not state["full"]:
+                return ""
+            if flag("_mock_seq_change"):
+                return chunk(cmd, lambda i: ((1 << 8) | 100) if i < 5 else ((2 << 8) | 60))
+            return chunk(cmd, lambda i: (1 << 8) | 100)
         if "get_rx_count" in cmd:
             return "0"
+        if "get_act_count" in cmd:
+            return str(getattr(mod, "_mock_act_count", 0))
+        if "get_act_chunk" in cmd:
+            rows = getattr(mod, "_mock_act_rows", None)
+            if isinstance(rows, list):
+                flat = [v for r in rows for v in r]
+                m = re.search(r"chunk', (\d+)\)", cmd)
+                offset = int(m.group(1))
+                if offset >= len(flat):
+                    return ""
+                return ",".join(str(x) for x in flat[offset : offset + 48])
+            return ""
         if "realload.sh check" in cmd:
             if flag("_mock_realload_fail"):
                 return "LOADCHECK FAIL tier=rnet rx_Bps=0 inferences=-"
@@ -140,6 +166,13 @@ def harness_env(tmp_path, monkeypatch):
                 rows = state["n"] - (5 if flag("_mock_ref_short") else 0)
                 lines = ["cycle,interval_cyc,interval_us,interval_ms,jitter_ms,is_miss"]
                 lines += [f"{i},1600000,10000.0000,10.000000,0.000000,0" for i in range(rows)]
+            elif "drive" in dest.name:
+                lines = [
+                    f"# ticks={state['n']} tick_min_cyc=1600000 tick_max_cyc=1600000 "
+                    "periods=100 period_outliers=0 level_errors=0 initial_high_cyc=256000 "
+                    "events=0 events_dropped=0",
+                    "event,tick_idx,tick_cyc,rise_cyc,fall_cyc,high_cyc,period_cyc",
+                ]
             else:
                 lines = ["# frames_source=cwru period_ns=85333333",
                          "seq,frame_idx,setpoint_pct,release_ns,t_send_ns,t_return_ns,rtt_us,skipped_after,status",
@@ -161,6 +194,7 @@ def harness_env(tmp_path, monkeypatch):
         state["full"] = variant is not None
         state["n"] = kw.get("sample_count", 0)
         state["ref"] = "READY 0"
+        state["drive"] = "READY 0"
         state["stress"] = False
         state["allcore"] = False
         mod.check_preflight(variant=variant)
@@ -616,4 +650,99 @@ def test_rnet_needs_ips():
     )
     assert res.returncode != 0
     assert "--dut-ip" in res.stdout
+
+
+# --- Phase 6b: variant act & drive board ---
+
+def test_act_idle_files(harness_env):
+    mod, record, _, tmp_path = harness_env
+    cmds = record(sample_count=20, stress_pct=0, tag="0_act_tuned", variant="act")
+    out_dir = tmp_path / "act_tuned"
+    assert (out_dir / "C_0_act_tuned.csv").exists()
+    assert (out_dir / "config_c_act_0_act_tuned.csv").exists()
+    assert (out_dir / "config_c_drive_0_act_tuned.csv").exists()
+
+    cmd_strings = _cmd_strings(cmds)
+    idx_ref_start = next(i for i, c in enumerate(cmd_strings) if "echo 'START 20' > /tmp/referee_cmd" in c)
+    idx_drv_start = next(i for i, c in enumerate(cmd_strings) if "echo 'START' > /tmp/drive_cmd" in c)
+    idx_trigger = next(i for i, c in enumerate(cmd_strings) if "start_zephyr_pulses" in c)
+    idx_ref_stop = next(i for i, c in enumerate(cmd_strings) if "referee_0_act_tuned.csv' > /tmp/referee_cmd" in c)
+    idx_drv_stop = next(i for i, c in enumerate(cmd_strings) if "drive_0_act_tuned.csv' > /tmp/drive_cmd" in c)
+    assert idx_ref_start < idx_drv_start < idx_trigger < idx_ref_stop < idx_drv_stop
+
+
+def test_act_rnet_files(harness_env):
+    mod, record, _, tmp_path = harness_env
+    cmds = record(
+        sample_count=20,
+        stress_pct=0,
+        tag="0_act_tuned_rnet",
+        variant="act",
+        rep=2,
+        load="rnet",
+        dut_ip="192.168.1.50",
+        pc_ip="192.168.1.10",
+    )
+    out_dir = tmp_path / "act_tuned_rnet_r2"
+    assert (out_dir / "C_0_act_tuned_rnet.csv").exists()
+    assert (out_dir / "config_c_drive_0_act_tuned_rnet.csv").exists()
+
+    cmd_strings = _cmd_strings(cmds)
+    assert any("realload.sh start rnet" in c for c in cmd_strings)
+    idx_drv_start = next(i for i, c in enumerate(cmd_strings) if "echo 'START' > /tmp/drive_cmd" in c)
+    idx_trigger = next(i for i, c in enumerate(cmd_strings) if "start_zephyr_pulses" in c)
+    assert idx_drv_start < idx_trigger
+
+    popen_cmds = [e[1] for e in cmds if e[0] == "popen"]
+    assert len(popen_cmds) == 1
+    assert "bulk" in [str(x) for x in popen_cmds[0]]
+
+
+def test_drive_not_recording_aborts(harness_env):
+    mod, record, recorded, _ = harness_env
+    mod._mock_drive_no_record = True
+    with pytest.raises(SystemExit):
+        record(sample_count=20, stress_pct=0, tag="0_act_tuned", variant="act")
+    cmds = _cmd_strings(recorded)
+    assert not any("start_zephyr_pulses" in c for c in cmds)
+    assert any("/tmp/referee_cmd" in c and "echo 'STOP" in c for c in cmds)
+
+
+def test_act_log_mismatch_exits(harness_env):
+    mod, record, _, tmp_path = harness_env
+    mod._mock_act_count = 1
+    with pytest.raises(SystemExit):
+        record(sample_count=20, stress_pct=0, tag="0_act_tuned", variant="act")
+    out_dir = tmp_path / "act_tuned"
+    assert (out_dir / "C_0_act_tuned.csv").exists()
+    assert (out_dir / "config_c_act_0_act_tuned.csv").exists()
+    assert (out_dir / "config_c_drive_0_act_tuned.csv").exists()
+
+
+def test_ipct_sends_nothing_to_drive(harness_env):
+    mod, record, _, _ = harness_env
+    cmds = record(sample_count=20, stress_pct=0, tag="0_ipc_tuned", variant="ipct")
+    assert not any(e[0] == mod.DRIVE_ID for e in cmds)
+
+
+def test_act_log_with_change_ok(harness_env):
+    mod, record, _, tmp_path = harness_env
+    mod._mock_seq_change = True
+    mod._mock_act_count = 1
+    mod._mock_act_rows = [(5, 123456, 1168, 60)]
+    record(sample_count=20, stress_pct=0, tag="0_act_tuned", variant="act")
+    act_csv = tmp_path / "act_tuned" / "config_c_act_0_act_tuned.csv"
+    lines = act_csv.read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "# act_count=1"
+    assert lines[1] == "cycle,t_write_cyc,cost_cyc,setpoint_pct"
+    assert lines[2:] == ["5,123456,1168,60"]
+
+
+def test_act_log_wrong_cycle_exits(harness_env):
+    mod, record, _, _ = harness_env
+    mod._mock_seq_change = True
+    mod._mock_act_count = 1
+    mod._mock_act_rows = [(6, 123456, 1168, 60)]
+    with pytest.raises(SystemExit):
+        record(sample_count=20, stress_pct=0, tag="0_act_tuned", variant="act")
 

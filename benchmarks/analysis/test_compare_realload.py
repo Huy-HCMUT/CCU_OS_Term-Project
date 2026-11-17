@@ -134,3 +134,64 @@ def test_compare_realload_blocks_evidence_and_filtering(tmp_path):
     assert b_row["pc_avg_rate_Bps"] == pytest.approx(48000.0)
     assert "550.0 [550.0–550.0]" in md_text
 
+
+def _write_c_csv(path: Path, n: int = 10000) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cycles = np.arange(n, dtype=np.int64)
+    wake = cycles * 1_600_000
+    if n > 10:
+        wake[10] += 320  # +2.0 us jitter
+    pd.DataFrame({"cycle": cycles, "wake_cyc": wake}).to_csv(path, index=False)
+
+
+def test_compare_realload_act_tuned_and_ignores_non_realload_ipc(tmp_path):
+    raw_dir = tmp_path / "raw"
+
+    # Phase 6b act_tuned idle + act_tuned_rnet_r2 (no counters/thermal/traffic in idle)
+    _write_c_csv(raw_dir / "act_tuned" / "C_0_act_tuned.csv")
+    _write_c_csv(raw_dir / "act_tuned_rnet_r2" / "C_0_act_tuned_rnet.csv")
+    (raw_dir / "act_tuned_rnet_r2" / "config_c_env_0_act_tuned_rnet.txt").write_text(
+        "# loadcheck mid: LOADCHECK OK tier=rnet rx_Bps=3000000 inferences=-\n",
+        encoding="utf-8",
+    )
+    (raw_dir / "act_tuned_rnet_r2" / "pc_traffic_0_act_tuned_rnet.json").write_text(
+        json.dumps({"avg_rate_Bps": 3100000.0, "reconnects": 0}),
+        encoding="utf-8",
+    )
+
+    # Non-realload ipc_tuned folders must be ignored
+    _write_c_csv(raw_dir / "ipc_tuned" / "C_0_ipc_tuned.csv")
+    _write_c_csv(raw_dir / "ipc_tuned_allcore" / "C_100_ipc_tuned_allcore.csv")
+
+    # Minimal ref CSV with NO C act tuned rows -> '–' in Ref columns without error
+    ref_csv = tmp_path / "compare_long.csv"
+    pd.DataFrame(
+        [{"series": "A", "tier": "0", "rep": 1, "file": "linux_r1/A_0.csv", "wcl_us": 550.0}]
+    ).to_csv(ref_csv, index=False)
+
+    out_dir = tmp_path / "out"
+    df, md_text, chart = compare_realload.compare_realload(raw_dir, ref_csv, out_dir)
+
+    assert chart.exists()
+    assert len(df) == 2
+    assert set(df["series"]) == {"C act tuned"}
+    assert set(df["tier"]) == {"0", "rnet"}
+
+    idle_row = df[df["tier"] == "0"].iloc[0]
+    assert idle_row["file"] == "act_tuned/C_0_act_tuned.csv"
+    assert idle_row["rep"] == 1
+    assert np.isnan(idle_row["wlan0_rx_bytes_delta"])
+    assert np.isnan(idle_row["temp_max_c"])
+    assert np.isnan(idle_row["pc_avg_rate_Bps"])
+
+    rnet_row = df[df["tier"] == "rnet"].iloc[0]
+    assert rnet_row["rep"] == 2
+    assert rnet_row["pc_avg_rate_Bps"] == pytest.approx(3100000.0)
+
+    # Pairs with no runs are skipped, and C act tuned shows '–' for both Ref cols
+    assert "| A | 0 |" not in md_text
+    assert "| C act tuned | rdeploy |" not in md_text
+    assert "| C act tuned | 0 | 1 | 10000 |" in md_text
+    assert "| – | – |" in md_text
+
+

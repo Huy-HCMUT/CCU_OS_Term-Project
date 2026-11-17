@@ -15,10 +15,12 @@ from pathlib import Path
 ADB = r"C:\Users\Hyen\platform-tools\adb.exe"
 DUT_ID = "3125036249"
 REF_ID = "253074993"
+DRIVE_ID = "2118750107"
 RAW_DIR = Path(__file__).resolve().parent.parent / "results" / "raw"
 BOARD_REPO = "/home/arduino/CCU_OS_Term-Project"
 
 _REALLOAD = {"proc": None, "raw_dir": None, "outdir": None, "active": False}
+_DRIVE = {"active": False}
 
 def run_adb(device, cmd):
     res = subprocess.run([ADB, "-s", device, "shell", cmd], capture_output=True, text=True)
@@ -31,6 +33,7 @@ def get_container(device, pattern, default):
 DUT_CONTAINER = "tmp-pin_test-main-1"
 REF_CONTAINER = "home-arduino-arduinoapps-referee_bench-main-1"
 IPC_CONTAINER = "config_c_ipc"
+DRIVE_CONTAINER = "tmp-drive_emu-main-1"
 
 VARIANTS = {
     "b2": {
@@ -60,6 +63,14 @@ VARIANTS = {
         "grep": "config_c_ipc_tuned",
         "default_container": "config_c_ipc_tuned",
         "kind": "ipc",
+    },
+    "act": {
+        "raw_base": "act_tuned",
+        "tag_suffix": "_act_tuned",
+        "grep": "config_c_act_tuned",
+        "default_container": "config_c_act_tuned",
+        "kind": "ipc",
+        "drive": True,
     },
 }
 
@@ -144,6 +155,35 @@ def _pull_with_retry(device, remote, local, min_rows, strict):
         subprocess.run([ADB, "-s", device, "pull", remote, str(local)], capture_output=True)
 
 
+def _seq_changes(seq_words):
+    """Return [(cycle, setpoint_pct), ...] where w & 0xFF differs from previous cycle, starting at 100."""
+    changes = []
+    prev = 100
+    for k, w in enumerate(seq_words):
+        sp = w & 0xFF
+        if sp != prev:
+            changes.append((k, sp))
+            prev = sp
+    return changes
+
+
+def _parse_drive_meta(path):
+    """Parse `# key=val ...` metadata line from a drive CSV, or None if missing/unparsable."""
+    if not path.exists():
+        return None
+    with open(path, "r") as f:
+        first = f.readline().strip()
+    if not first.startswith("#"):
+        return None
+    meta = {}
+    for tok in first[1:].split():
+        if "=" in tok:
+            k, v = tok.split("=", 1)
+            if _is_int(v):
+                meta[k] = int(v)
+    return meta
+
+
 def _stop_realload():
     """Stop PC traffic generator, stop board realload.sh, and pull board artifacts. Safe to call twice."""
     proc = _REALLOAD.get("proc")
@@ -188,6 +228,9 @@ def _abort_run(msg, dut, tag, stress_pct, is_ipc, kill_stress=None):
         run_adb(DUT_ID, "killall -9 stress-ng 2>/dev/null")
         run_adb(DUT_ID, "sudo pkill -9 stress-ng 2>/dev/null")
     _stop_realload()
+    if _DRIVE["active"]:
+        run_adb(DRIVE_ID, f"docker exec {DRIVE_CONTAINER} sh -c \"echo 'STOP /home/arduino/drive_{tag}_aborted.csv' > /tmp/drive_cmd\"")
+        _DRIVE["active"] = False
     run_adb(REF_ID, f"docker exec {REF_CONTAINER} sh -c \"echo 'STOP /home/arduino/referee_{tag}_aborted.csv' > /tmp/referee_cmd\"")
     print("      No data files were written for this tag. Fix the cause (app running? USB?), then run the same command again.")
     sys.exit(1)
@@ -315,7 +358,7 @@ def refuse_overwrite(raw_dir, tags):
 
 
 def check_preflight(variant=None):
-    global DUT_CONTAINER, REF_CONTAINER, IPC_CONTAINER
+    global DUT_CONTAINER, REF_CONTAINER, IPC_CONTAINER, DRIVE_CONTAINER
     if variant in VARIANTS:
         vinfo = VARIANTS[variant]
         container = get_container(DUT_ID, vinfo["grep"], vinfo["default_container"])
@@ -334,6 +377,9 @@ def check_preflight(variant=None):
         sys.exit(1)
     if variant in ("ipct", "b2t") and "tuned" not in dut_for_preflight:
         print(f"ERROR: variant {variant} but DUT container {dut_for_preflight} is not a tuned app")
+        sys.exit(1)
+    if variant == "act" and "config_c_act_tuned" not in dut_for_preflight:
+        print(f"ERROR: variant act but DUT container {dut_for_preflight} is not config_c_act_tuned")
         sys.exit(1)
 
     print("=" * 75)
@@ -366,6 +412,16 @@ def check_preflight(variant=None):
     if variant in VARIANTS and not ref_status:
         print("ERROR: no referee status. Is referee_bench running on the referee board?")
         sys.exit(1)
+
+    # 3. Check Board 3 Drive emulator status (drive variants only)
+    if variant in VARIANTS and VARIANTS[variant].get("drive", False):
+        DRIVE_CONTAINER = get_container(DRIVE_ID, "drive_emu", "tmp-drive_emu-main-1")
+        print(f"[Pre-flight 3/3] Checking Board 3 (Drive) status ({DRIVE_CONTAINER})...")
+        drive_status = run_adb(DRIVE_ID, f"docker exec {DRIVE_CONTAINER} cat /tmp/drive_status")
+        print(f"  -> Drive status: {drive_status}")
+        if not drive_status:
+            print("ERROR: no drive status. Is drive_emu running on board 3?")
+            sys.exit(1)
     print("-" * 75)
 
 
@@ -384,6 +440,7 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
 
     is_realload = load in ("rnet", "rdeploy")
     is_ipc = variant in VARIANTS and VARIANTS[variant]["kind"] == "ipc"
+    is_drive = variant in VARIANTS and VARIANTS[variant].get("drive", False)
     dut = IPC_CONTAINER if is_ipc else DUT_CONTAINER
     if variant is None:
         raw_dir = RAW_DIR
@@ -403,6 +460,7 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
     print(f"\n>>> EXECUTING CONFIG C RUN: count={sample_count}, stress={stress_pct}%, tag={tag}")
 
     mid_loadcheck = None
+    _DRIVE["active"] = False
     try:
         # 1. Arm Referee
         print(f"[1/5] Arming Referee for {sample_count} pulses...")
@@ -419,6 +477,25 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
                 print(f"ERROR: referee did not start recording (status '{ref_st}').")
                 print("      No data files were written for this tag. Check referee_bench and the USB cable, then run the same command again.")
                 sys.exit(1)
+
+        if is_drive:
+            run_adb(DRIVE_ID, f"docker exec {DRIVE_CONTAINER} sh -c \"echo 'START' > /tmp/drive_cmd\"")
+            time.sleep(0.5)
+            drive_st = ""
+            for _ in range(REF_ARM_POLLS):
+                drive_st = run_adb(DRIVE_ID, f"docker exec {DRIVE_CONTAINER} cat /tmp/drive_status")
+                if drive_st.startswith("RECORDING"):
+                    break
+                time.sleep(0.5)
+            if not drive_st.startswith("RECORDING"):
+                _abort_run(
+                    f"drive board did not start recording (status '{drive_st}')",
+                    dut,
+                    tag,
+                    stress_pct,
+                    is_ipc,
+                )
+            _DRIVE["active"] = True
 
         if is_ipc:
             run_adb(DUT_ID, f"docker exec {dut} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('reset_ipc', 0))\"")
@@ -533,6 +610,18 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
                 print(f"      Referee status: {st}")
                 break
 
+        if is_drive:
+            print("      Stopping Drive board capture...")
+            drive_remote_csv = f"/home/arduino/drive_{tag}.csv"
+            run_adb(DRIVE_ID, f"docker exec {DRIVE_CONTAINER} sh -c \"echo 'STOP {drive_remote_csv}' > /tmp/drive_cmd\"")
+            for _ in range(90):
+                time.sleep(0.5)
+                st_drive = run_adb(DRIVE_ID, f"docker exec {DRIVE_CONTAINER} cat /tmp/drive_status")
+                if st_drive.startswith("STOPPED") or "ERROR" in st_drive:
+                    print(f"      Drive status: {st_drive}")
+                    break
+            _DRIVE["active"] = False
+
         # 5. Retrieve data from both boards
         print("[5/5] Retrieving data from both boards...")
 
@@ -540,6 +629,11 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
         local_ref_csv = raw_dir / f"config_c_referee_{tag}.csv"
         run_adb(REF_ID, f"docker cp {REF_CONTAINER}:{ref_remote_csv} {ref_remote_csv}")
         _pull_with_retry(REF_ID, ref_remote_csv, local_ref_csv, sample_count, strict)
+
+        if is_drive:
+            local_drive_csv = raw_dir / f"config_c_drive_{tag}.csv"
+            run_adb(DRIVE_ID, f"docker cp {DRIVE_CONTAINER}:{drive_remote_csv} {drive_remote_csv}")
+            _pull_with_retry(DRIVE_ID, drive_remote_csv, local_drive_csv, 0, strict)
 
         # 5B. Fetch DWT records from Board 1
         print("      Fetching DWT records from Board 1 STM32...")
@@ -587,6 +681,30 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
                 for i, w in enumerate(seq_words):
                     writer.writerow([i, w >> 8, w & 0xFF])
             print(f"      Saved IPC seq records to {local_seq_csv.name}")
+
+        if is_drive:
+            print("      Fetching act write log (act_chunk) from Board 1 STM32...")
+            cmd_act = f"docker exec {dut} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('get_act_count', 0))\""
+            act_count_str = run_adb(DUT_ID, cmd_act).strip()
+            attempt = 0
+            while strict and not _is_int(act_count_str) and attempt < READOUT_RETRIES:
+                attempt += 1
+                print(f"      WARNING: get_act_count returned '{act_count_str[:60]}'; retry {attempt}/{READOUT_RETRIES}...")
+                time.sleep(READOUT_RETRY_DELAY_S)
+                act_count_str = run_adb(DUT_ID, cmd_act).strip()
+
+            act_vals = []
+            if _is_int(act_count_str) and int(act_count_str) > 0:
+                act_vals = _fetch_chunks(dut, "get_act_chunk", 4 * int(act_count_str), strict)
+
+            local_act_csv = raw_dir / f"config_c_act_{tag}.csv"
+            with open(local_act_csv, "w", newline="") as f:
+                f.write(f"# act_count={act_count_str}\n")
+                writer = csv.writer(f)
+                writer.writerow(["cycle", "t_write_cyc", "cost_cyc", "setpoint_pct"])
+                for i in range(0, len(act_vals) - (len(act_vals) % 4), 4):
+                    writer.writerow(act_vals[i : i + 4])
+            print(f"      Saved act records to {local_act_csv.name}")
 
         # Standardized output
         if tag == std_tag:
@@ -658,6 +776,23 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
                     problems.append(f"rx_count '{rx_count_str}'")
                 if _count_csv_rows(local_sender_csv) < 1:
                     problems.append("sender CSV empty or missing")
+            if is_drive:
+                if not _is_int(act_count_str):
+                    problems.append(f"act count '{act_count_str}'")
+                else:
+                    n_act = int(act_count_str)
+                    if len(act_vals) != 4 * n_act:
+                        problems.append(f"act {len(act_vals)}/{4 * n_act}")
+                    else:
+                        act_pairs = [(act_vals[4 * i], act_vals[4 * i + 3]) for i in range(n_act)]
+                        if act_pairs != _seq_changes(seq_words):
+                            problems.append("act log does not match setpoint changes")
+                drive_meta = _parse_drive_meta(local_drive_csv)
+                drive_ticks = drive_meta.get("ticks") if drive_meta else None
+                drive_events = _count_csv_rows(local_drive_csv)
+                if drive_meta is None or drive_ticks != sample_count:
+                    x = drive_ticks if drive_ticks is not None else "missing"
+                    problems.append(f"drive ticks {x}/{sample_count}")
             if problems:
                 level = load if load in ("allcore", "rnet", "rdeploy") else ("sanity" if tag.startswith("sanity") else str(stress_pct))
                 rep_arg = f" --rep {rep}" if rep != 1 else ""
@@ -665,11 +800,16 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
                 print("       The files were kept. Ask Claude to move this tag's files to results/raw/archive/,")
                 print(f"       then re-run only this level: {variant}-{level}{rep_arg}")
                 sys.exit(1)
-            print(f"      Completeness check OK: {sample_count} DWT + {n_ref} referee records" + (f" + {len(seq_words)} seq" if is_ipc else "")
-                  + f"; Linux load matches {stress_pct}% ({len(env_samples)} samples)")
+            print(
+                f"      Completeness check OK: {sample_count} DWT + {n_ref} referee records"
+                + (f" + {len(seq_words)} seq" if is_ipc else "")
+                + (f" + drive {drive_events} events" if is_drive else "")
+                + f"; Linux load matches {stress_pct}% ({len(env_samples)} samples)"
+            )
     finally:
         if is_realload:
             _stop_realload()
+        _DRIVE["active"] = False
 
 def analyze_dual_data(dwt_path, ref_path, tag):
     if not dwt_path.exists() or not ref_path.exists():
@@ -798,7 +938,7 @@ if __name__ == "__main__":
     variant = prefix if prefix in VARIANTS else None
 
     if rep_given and variant is None:
-        print("ERROR: --rep needs a b2/ipc/b2t/ipct mode")
+        print("ERROR: --rep needs a b2/ipc/b2t/ipct/act mode")
         sys.exit(1)
 
     if variant is not None:
