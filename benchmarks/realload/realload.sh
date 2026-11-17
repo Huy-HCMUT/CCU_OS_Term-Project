@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# realload.sh - Phase 6a board-side realistic load controller (R-net and R-deploy)
+# realload.sh - Phase 6a board-side realistic load controller (R-net, R-deploy and R-both)
 #
 # Subcommands:
-#   start <rnet|rdeploy> <label> <outdir> <pc_ip> [iso]
-#   check <rnet|rdeploy>
+#   start <rnet|rdeploy|rboth> <label> <outdir> <pc_ip> [iso]
+#   check <rnet|rdeploy|rboth>
 #   stop
 #   status
 #
@@ -110,7 +110,7 @@ run_sampler() {
 
 cmd_start() {
     if [ "$#" -lt 4 ] || [ "$#" -gt 5 ]; then
-        echo "Usage: $0 start <rnet|rdeploy> <label> <outdir> <pc_ip> [iso]" >&2
+        echo "Usage: $0 start <rnet|rdeploy|rboth> <label> <outdir> <pc_ip> [iso]" >&2
         exit 1
     fi
     local tier="$1"
@@ -119,8 +119,8 @@ cmd_start() {
     local pc_ip="$4"
     local iso="${5:-}"
 
-    if [ "${tier}" != "rnet" ] && [ "${tier}" != "rdeploy" ]; then
-        echo "ERROR: unknown tier '${tier}', expected rnet or rdeploy" >&2
+    if [ "${tier}" != "rnet" ] && [ "${tier}" != "rdeploy" ] && [ "${tier}" != "rboth" ]; then
+        echo "ERROR: unknown tier '${tier}', expected rnet, rdeploy or rboth" >&2
         exit 1
     fi
     if [ -n "${iso}" ] && [ "${iso}" != "iso" ]; then
@@ -132,29 +132,33 @@ cmd_start() {
         exit 1
     fi
 
+    local width=""
+    if [ "${tier}" = "rdeploy" ] || [ "${tier}" = "rboth" ]; then
+        local width_file="${ROOT_DIR}/benchmarks/realload/model_width.txt"
+        if [ ! -r "${width_file}" ]; then
+            echo "ERROR: missing ${width_file}; run calibration first" >&2
+            exit 1
+        fi
+        width="$(tr -d ' \t\r\n' < "${width_file}")"
+        if ! [[ "${width}" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: invalid width '${width}' in ${width_file}" >&2
+            exit 1
+        fi
+    fi
+
     mkdir -p "${outdir}"
     write_counters "${outdir}/counters_${label}_before.txt"
 
     local sink_pid=""
-    if [ "${tier}" = "rnet" ]; then
+    if [ "${tier}" = "rnet" ] || [ "${tier}" = "rboth" ]; then
         if [ "${iso}" = "iso" ]; then
             nohup taskset -c 0-2 socat -u TCP-LISTEN:5557,reuseaddr,fork OPEN:/dev/null >/dev/null 2>&1 &
         else
             nohup socat -u TCP-LISTEN:5557,reuseaddr,fork OPEN:/dev/null >/dev/null 2>&1 &
         fi
         sink_pid="$!"
-    else
-        local width_file="${ROOT_DIR}/benchmarks/realload/model_width.txt"
-        if [ ! -r "${width_file}" ]; then
-            echo "ERROR: missing ${width_file}; run calibration first" >&2
-            exit 1
-        fi
-        local width
-        width="$(tr -d ' \t\r\n' < "${width_file}")"
-        if ! [[ "${width}" =~ ^[0-9]+$ ]]; then
-            echo "ERROR: invalid width '${width}' in ${width_file}" >&2
-            exit 1
-        fi
+    fi
+    if [ "${tier}" = "rdeploy" ] || [ "${tier}" = "rboth" ]; then
         local -a docker_args=(
             -d --rm --name "${CONTAINER_NAME}"
             --user "$(id -u):$(id -g)"
@@ -164,8 +168,15 @@ cmd_start() {
         if [ "${iso}" = "iso" ]; then
             docker_args+=(--cpuset-cpus 0-2)
         fi
-        docker run "${docker_args[@]}" "${IMAGE_NAME}" \
-            --label "${label}" --pc-ip "${pc_ip}" --threads 3 --width "${width}" --out /out >/dev/null
+        if ! docker run "${docker_args[@]}" "${IMAGE_NAME}" \
+            --label "${label}" --pc-ip "${pc_ip}" --threads 3 --width "${width}" --out /out >/dev/null; then
+            if [ -n "${sink_pid}" ]; then
+                pkill -P "${sink_pid}" 2>/dev/null || true
+                kill "${sink_pid}" 2>/dev/null || true
+            fi
+            echo "ERROR: docker run failed for ${tier}" >&2
+            exit 1
+        fi
     fi
 
     local sampler_pid=""
@@ -208,12 +219,12 @@ read_status_count() {
 
 cmd_check() {
     if [ "$#" -ne 1 ]; then
-        echo "Usage: $0 check <rnet|rdeploy>" >&2
+        echo "Usage: $0 check <rnet|rdeploy|rboth>" >&2
         exit 1
     fi
     local want_tier="$1"
-    if [ "${want_tier}" != "rnet" ] && [ "${want_tier}" != "rdeploy" ]; then
-        echo "ERROR: unknown tier '${want_tier}', expected rnet or rdeploy" >&2
+    if [ "${want_tier}" != "rnet" ] && [ "${want_tier}" != "rdeploy" ] && [ "${want_tier}" != "rboth" ]; then
+        echo "ERROR: unknown tier '${want_tier}', expected rnet, rdeploy or rboth" >&2
         exit 1
     fi
     if [ ! -r "${STATE_FILE}" ]; then
@@ -231,12 +242,12 @@ cmd_check() {
 
     local rx1 rx2 inf1=0 inf2=0 rx_bps inf_delta inf_str ok=0
     rx1="$(read_rx_bytes)"
-    if [ "${tier}" = "rdeploy" ]; then
+    if [ "${tier}" = "rdeploy" ] || [ "${tier}" = "rboth" ]; then
         inf1="$(read_status_count "${outdir}/analytics_${label}_status.txt")"
     fi
     sleep 5
     rx2="$(read_rx_bytes)"
-    if [ "${tier}" = "rdeploy" ]; then
+    if [ "${tier}" = "rdeploy" ] || [ "${tier}" = "rboth" ]; then
         inf2="$(read_status_count "${outdir}/analytics_${label}_status.txt")"
     fi
 
@@ -245,6 +256,12 @@ cmd_check() {
         inf_delta=$(( inf2 - inf1 ))
         inf_str="${inf_delta}"
         if [ "${rx_bps}" -ge 30000 ] && [ "${inf_delta}" -ge 30 ]; then
+            ok=1
+        fi
+    elif [ "${tier}" = "rboth" ]; then
+        inf_delta=$(( inf2 - inf1 ))
+        inf_str="${inf_delta}"
+        if [ "${rx_bps}" -ge 1000000 ] && [ "${inf_delta}" -ge 30 ]; then
             ok=1
         fi
     else
@@ -272,11 +289,12 @@ cmd_stop() {
     # shellcheck disable=SC1090
     source "${STATE_FILE}"
 
-    if [ "${tier}" = "rnet" ] && [ -n "${sink_pid}" ]; then
+    if { [ "${tier}" = "rnet" ] || [ "${tier}" = "rboth" ]; } && [ -n "${sink_pid}" ]; then
         pkill -P "${sink_pid}" 2>/dev/null || true
         kill "${sink_pid}" 2>/dev/null || true
         wait "${sink_pid}" 2>/dev/null || true
-    elif [ "${tier}" = "rdeploy" ]; then
+    fi
+    if [ "${tier}" = "rdeploy" ] || [ "${tier}" = "rboth" ]; then
         docker stop -t 10 "${CONTAINER_NAME}" >/dev/null 2>&1 || true
     fi
 

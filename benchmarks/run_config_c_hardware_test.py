@@ -19,7 +19,8 @@ DRIVE_ID = "2118750107"
 RAW_DIR = Path(__file__).resolve().parent.parent / "results" / "raw"
 BOARD_REPO = "/home/arduino/CCU_OS_Term-Project"
 
-_REALLOAD = {"proc": None, "raw_dir": None, "outdir": None, "active": False}
+REALLOAD_LOADS = ("rnet", "rdeploy", "rboth")
+_REALLOAD = {"procs": [], "raw_dir": None, "outdir": None, "active": False}
 _DRIVE = {"active": False}
 
 def run_adb(device, cmd):
@@ -186,26 +187,27 @@ def _parse_drive_meta(path):
 
 def _stop_realload():
     """Stop PC traffic generator, stop board realload.sh, and pull board artifacts. Safe to call twice."""
-    proc = _REALLOAD.get("proc")
+    procs = list(_REALLOAD.get("procs") or [])
     raw_dir = _REALLOAD.get("raw_dir")
     outdir = _REALLOAD.get("outdir")
     active = _REALLOAD.get("active", False)
-    if not active and proc is None:
+    if not active and not procs:
         return
     _REALLOAD["active"] = False
-    _REALLOAD["proc"] = None
+    _REALLOAD["procs"] = []
     _REALLOAD["raw_dir"] = None
     _REALLOAD["outdir"] = None
-    if proc is not None:
-        try:
-            proc.terminate()
-            proc.wait(timeout=5)
-        except Exception:
+    for proc in procs:
+        if proc is not None:
             try:
-                proc.kill()
-                proc.wait(timeout=2)
+                proc.terminate()
+                proc.wait(timeout=5)
             except Exception:
-                pass
+                try:
+                    proc.kill()
+                    proc.wait(timeout=2)
+                except Exception:
+                    pass
     run_adb(DUT_ID, f"bash {BOARD_REPO}/benchmarks/realload/realload.sh stop")
     if outdir and raw_dir is not None:
         res = subprocess.run(
@@ -342,7 +344,7 @@ def _variant_raw_dir(variant, rep=1, load="core0"):
     base = VARIANTS[variant]["raw_base"]
     if load == "allcore":
         base = f"{base}_allcore"
-    elif load in ("rnet", "rdeploy"):
+    elif load in REALLOAD_LOADS:
         base = f"{base}_{load}"
     return RAW_DIR / (base if rep == 1 else f"{base}_r{rep}")
 
@@ -426,19 +428,19 @@ def check_preflight(variant=None):
 
 
 def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None, rep=1, load="core0", folder_load=None, dut_ip=None, pc_ip=None):
-    if load not in ("core0", "allcore", "rnet", "rdeploy"):
+    if load not in ("core0", "allcore") + REALLOAD_LOADS:
         print(f"ERROR: invalid load '{load}'")
         sys.exit(1)
     if load == "allcore" and (variant not in VARIANTS or stress_pct != 100):
         print("ERROR: load='allcore' requires a variant and stress_pct=100")
         sys.exit(1)
-    if load in ("rnet", "rdeploy") and (variant not in VARIANTS or stress_pct != 0 or not dut_ip or not pc_ip):
+    if load in REALLOAD_LOADS and (variant not in VARIANTS or stress_pct != 0 or not dut_ip or not pc_ip):
         print(f"ERROR: load='{load}' requires a variant, stress_pct=0, --dut-ip and --pc-ip")
         sys.exit(1)
     if folder_load is None:
         folder_load = load
 
-    is_realload = load in ("rnet", "rdeploy")
+    is_realload = load in REALLOAD_LOADS
     is_ipc = variant in VARIANTS and VARIANTS[variant]["kind"] == "ipc"
     is_drive = variant in VARIANTS and VARIANTS[variant].get("drive", False)
     dut = IPC_CONTAINER if is_ipc else DUT_CONTAINER
@@ -447,7 +449,7 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
         std_tag = str(stress_pct)
     else:
         raw_dir = _variant_raw_dir(variant, rep, load=folder_load)
-        extra_sfx = f"_{load}" if load in ("allcore", "rnet", "rdeploy") else ""
+        extra_sfx = f"_{load}" if load in ("allcore",) + REALLOAD_LOADS else ""
         tag_sfx = VARIANTS[variant]["tag_suffix"] + extra_sfx
         std_tag = f"{stress_pct}{tag_sfx}"
 
@@ -509,21 +511,27 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
             _REALLOAD["outdir"] = board_outdir
             _REALLOAD["active"] = True
             run_adb(DUT_ID, f"bash {BOARD_REPO}/benchmarks/realload/realload.sh start {load} {tag} {board_outdir} {pc_ip}")
-            traffic_mode = "bulk" if load == "rnet" else "ingest"
-            traffic_proc = subprocess.Popen(
-                [
-                    sys.executable,
-                    str(Path(__file__).parent / "realload" / "pc_traffic.py"),
-                    traffic_mode,
-                    "--host",
-                    dut_ip,
-                    "--duration",
-                    "900",
-                    "--out",
-                    str(raw_dir / f"pc_traffic_{tag}.json"),
-                ]
-            )
-            _REALLOAD["proc"] = traffic_proc
+            modes = {"rnet": ["bulk"], "rdeploy": ["ingest"], "rboth": ["bulk", "ingest"]}[load]
+            for traffic_mode in modes:
+                out_json = (
+                    raw_dir / f"pc_traffic_{tag}.json"
+                    if len(modes) == 1
+                    else raw_dir / f"pc_traffic_{tag}_{traffic_mode}.json"
+                )
+                traffic_proc = subprocess.Popen(
+                    [
+                        sys.executable,
+                        str(Path(__file__).parent / "realload" / "pc_traffic.py"),
+                        traffic_mode,
+                        "--host",
+                        dut_ip,
+                        "--duration",
+                        "900",
+                        "--out",
+                        str(out_json),
+                    ]
+                )
+                _REALLOAD["procs"].append(traffic_proc)
             time.sleep(30.0)
             lc_out = run_adb(DUT_ID, f"bash {BOARD_REPO}/benchmarks/realload/realload.sh check {load}")
             if "LOADCHECK OK" not in lc_out:
@@ -794,7 +802,7 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
                     x = drive_ticks if drive_ticks is not None else "missing"
                     problems.append(f"drive ticks {x}/{sample_count}")
             if problems:
-                level = load if load in ("allcore", "rnet", "rdeploy") else ("sanity" if tag.startswith("sanity") else str(stress_pct))
+                level = load if load in ("allcore",) + REALLOAD_LOADS else ("sanity" if tag.startswith("sanity") else str(stress_pct))
                 rep_arg = f" --rep {rep}" if rep != 1 else ""
                 print(f"ERROR: incomplete data for tag {tag} in {raw_dir}: {', '.join(problems)}.")
                 print("       The files were kept. Ask Claude to move this tag's files to results/raw/archive/,")
@@ -953,7 +961,7 @@ if __name__ == "__main__":
         elif submode == "allcore":
             tags = [f"sanity{sfx}_allcore", f"100{sfx}_allcore"]
             target_load = "allcore"
-        elif submode in ("rnet", "rdeploy"):
+        elif submode in REALLOAD_LOADS:
             if not dut_ip or not pc_ip:
                 print(f"ERROR: {mode} needs --dut-ip and --pc-ip")
                 sys.exit(1)
@@ -1005,7 +1013,7 @@ if __name__ == "__main__":
             run_dual_benchmark(sample_count=20, stress_pct=0, tag=f"sanity{sfx}_allcore", variant=variant, rep=rep, load="core0", folder_load="allcore")
             time.sleep(3.0)
             run_dual_benchmark(sample_count=count, stress_pct=100, tag=f"100{sfx}_allcore", variant=variant, rep=rep, load="allcore")
-        elif submode in ("rnet", "rdeploy"):
+        elif submode in REALLOAD_LOADS:
             print(f"\n>>> EXECUTING CONFIG C {variant.upper()} {submode.upper()} RUN (sanity + {submode} load, N={count}, rep={rep})...")
             run_dual_benchmark(sample_count=20, stress_pct=0, tag=f"sanity{sfx}_{submode}", variant=variant, rep=rep, load="core0", folder_load=submode)
             time.sleep(3.0)

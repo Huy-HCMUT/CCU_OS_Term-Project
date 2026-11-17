@@ -20,8 +20,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from analyze_ipc import analyze_tag  # noqa: E402
 
-ACT_DIR_RE = re.compile(r"^act_tuned(?:_(?P<tier>rnet|rdeploy))?(?:_r(?P<rep>\d+))?$")
-TIERS = ["0", "rdeploy", "rnet"]
+ACT_DIR_RE = re.compile(r"^act_tuned(?:_(?P<tier>rnet|rdeploy|rboth))?(?:_r(?P<rep>\d+))?$")
+TIERS = ["0", "rdeploy", "rnet", "rboth"]
 DWT_HZ_MHZ = 160.0
 PWM_NOMINAL_PERIOD_CYC = 320000.0
 

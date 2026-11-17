@@ -23,14 +23,14 @@ from analyze_latency import load_run  # noqa: E402
 from compare_configs import SERIES_COLORS, _fmt_range, _summarize_run  # noqa: E402
 
 SERIES_ORDER = ["A", "B", "B-iso", "C IPC tuned", "C act tuned"]
-TIERS = ["0", "rdeploy", "rnet"]
+TIERS = ["0", "rdeploy", "rnet", "rboth"]
 BLOCK_SIZE = 10000
 LOCAL_SERIES_COLORS = {**SERIES_COLORS, "C act tuned": "#0f766e"}
 
 REAL_LINUX_DIR_RE = re.compile(r"^real_r(?P<rep>\d+)$")
-REAL_LINUX_FILE_RE = re.compile(r"^(?P<config>[AB])_0(?P<iso>_iso)?_(?P<tier>rnet|rdeploy)\.csv$")
-REAL_C_DIR_RE = re.compile(r"^ipc_tuned_(?P<tier>rnet|rdeploy)(?:_r(?P<rep>\d+))?$")
-ACT_DIR_RE = re.compile(r"^act_tuned(?:_(?P<tier>rnet|rdeploy))?(?:_r(?P<rep>\d+))?$")
+REAL_LINUX_FILE_RE = re.compile(r"^(?P<config>[AB])_0(?P<iso>_iso)?_(?P<tier>rnet|rdeploy|rboth)\.csv$")
+REAL_C_DIR_RE = re.compile(r"^ipc_tuned_(?P<tier>rnet|rdeploy|rboth)(?:_r(?P<rep>\d+))?$")
+ACT_DIR_RE = re.compile(r"^act_tuned(?:_(?P<tier>rnet|rdeploy|rboth))?(?:_r(?P<rep>\d+))?$")
 
 SOFTIRQ_KEYS = ("NET_RX", "NET_TX", "BLOCK", "TIMER")
 
@@ -260,7 +260,41 @@ def _parse_analytics(analytics_path: Path) -> dict:
 
 
 def _find_pc_traffic(folder: Path, label: str, tier: str) -> dict:
-    info = {"pc_avg_rate_Bps": np.nan, "pc_reconnects": np.nan}
+    info = {
+        "pc_avg_rate_Bps": np.nan,
+        "pc_reconnects": np.nan,
+        "pc_ingest_rate_Bps": np.nan,
+        "pc_ingest_late_skips": np.nan,
+    }
+    if tier == "rboth":
+        bulk_path = next(
+            (p for p in (folder / f"pc_traffic_{label}_bulk.json", folder / "pc_traffic_rboth_bulk.json") if p.exists()),
+            None,
+        )
+        if bulk_path is not None:
+            try:
+                data = json.loads(bulk_path.read_text(encoding="utf-8"))
+                if "avg_rate_Bps" in data:
+                    info["pc_avg_rate_Bps"] = float(data["avg_rate_Bps"])
+                if "reconnects" in data:
+                    info["pc_reconnects"] = int(data["reconnects"])
+            except (OSError, ValueError, TypeError):
+                pass
+        ingest_path = next(
+            (p for p in (folder / f"pc_traffic_{label}_ingest.json", folder / "pc_traffic_rboth_ingest.json") if p.exists()),
+            None,
+        )
+        if ingest_path is not None:
+            try:
+                data = json.loads(ingest_path.read_text(encoding="utf-8"))
+                if "avg_rate_Bps" in data:
+                    info["pc_ingest_rate_Bps"] = float(data["avg_rate_Bps"])
+                if "late_skips" in data:
+                    info["pc_ingest_late_skips"] = int(data["late_skips"])
+            except (OSError, ValueError, TypeError):
+                pass
+        return info
+
     candidates = [
         folder / f"pc_traffic_{label}.json",
         folder / f"pc_traffic_{tier}.json",
@@ -304,7 +338,7 @@ def _collect_evidence(folder: Path, label: str, tier: str, env_path: Path) -> di
     ev: dict = {}
     ev.update(_parse_counters(folder / f"counters_{label}_before.txt", folder / f"counters_{label}_after.txt"))
     ev.update(_parse_thermal(folder / f"thermal_{label}.csv"))
-    if tier == "rdeploy":
+    if tier in ("rdeploy", "rboth"):
         ev.update(_parse_analytics(folder / f"analytics_{label}.csv"))
     else:
         ev.update({"infer_count": np.nan, "infer_rate_hz": np.nan, "infer_p50_us": np.nan, "infer_p99_us": np.nan})
@@ -439,7 +473,7 @@ def _load_reference_wcl(ref_csv: Path) -> dict[tuple[str, str], tuple[str, float
 
 def _build_markdown(long_df: pd.DataFrame, ref_map: dict[tuple[str, str], tuple[str, float]]) -> str:
     lines = [
-        "# Phase 6a Realistic-Load Comparison (R-net & R-deploy)",
+        "# Phase 6a Realistic-Load Comparison (R-net, R-deploy & R-both)",
         "",
         "## Timing Summary",
         "",
@@ -492,6 +526,10 @@ def _build_markdown(long_df: pd.DataFrame, ref_map: dict[tuple[str, str], tuple[
             pc_s = f"{float(r['pc_avg_rate_Bps']):.0f} / {int(r['pc_reconnects'])}"
         else:
             pc_s = "—"
+        if pd.notna(r.get("pc_ingest_rate_Bps")):
+            skips = int(r["pc_ingest_late_skips"]) if pd.notna(r.get("pc_ingest_late_skips")) else 0
+            ingest_s = f"ingest {float(r['pc_ingest_rate_Bps']):.0f} / skips {skips}"
+            pc_s = ingest_s if pc_s == "—" else f"{pc_s} + {ingest_s}"
         lc_s = str(r["loadcheck"]) if str(r["loadcheck"]) else "—"
         aff_parts = [p for p in (str(r["irqs_moved"]), str(r["wifi_irq"])) if p]
         aff_s = "; ".join(aff_parts) if aff_parts else "—"
@@ -519,8 +557,11 @@ def _build_markdown(long_df: pd.DataFrame, ref_map: dict[tuple[str, str], tuple[
             "",
             "**C act tuned vs C IPC tuned (DECISIONS.md D12):** `C act tuned` equals tuned IPC plus the 500 Hz D3 "
             "PWM write, so its idle (`0`) runs are new Phase 6b runs rather than the Phase 5d `ipc_tuned` baseline. "
-            "It stands in for `C IPC tuned` under realistic load (`rdeploy`, `rnet`) only if F1 held (otherwise "
+            "It stands in for `C IPC tuned` under realistic load (`rdeploy`, `rnet`, `rboth`) only if F1 held (otherwise "
             "`C IPC tuned` realistic-load runs are reported separately).",
+            "",
+            "**R-both (DECISIONS.md D13):** `rnet` and `rdeploy` at the same time (production + burst), "
+            "the realistic worst case.",
             "",
         ]
     )
@@ -549,8 +590,8 @@ def _plot_block_wcl(records: list[dict], ref_map: dict[tuple[str, str], tuple[st
     )
 
     fig, ax = plt.subplots(figsize=(6.8, 4.2))
-    tier_offsets = {"0": -0.30, "rnet": -0.14, "rdeploy": 0.14}
-    tier_markers = {"0": "D", "rnet": "o", "rdeploy": "s"}
+    tier_offsets = {"0": -0.30, "rnet": -0.10, "rdeploy": 0.10, "rboth": 0.30}
+    tier_markers = {"0": "D", "rnet": "o", "rdeploy": "s", "rboth": "^"}
 
     seen_labels: set[str] = set()
     has_points = False
@@ -667,6 +708,8 @@ def compare_realload(raw_dir: Path, ref_csv: Path, out_dir: Path) -> tuple[pd.Da
         "infer_p99_us",
         "pc_avg_rate_Bps",
         "pc_reconnects",
+        "pc_ingest_rate_Bps",
+        "pc_ingest_late_skips",
         "loadcheck",
         "irqs_moved",
         "wifi_irq",

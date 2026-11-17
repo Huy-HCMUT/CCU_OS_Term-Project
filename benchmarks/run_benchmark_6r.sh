@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 #
-# run_benchmark_6r.sh - Phase 6a Linux Benchmark Harness (realistic loads R-net and R-deploy)
+# run_benchmark_6r.sh - Phase 6a Linux Benchmark Harness (realistic loads R-net, R-deploy and R-both)
 #
 # Runs A, B, and isolated B for one realistic load tier into results/raw/real_r<REP>/,
 # controlling board-side load via benchmarks/realload/realload.sh, logging Linux env and
 # IRQ affinity metadata, and restoring governors, IRQs, and realload state on exit.
 #
-# Usage: bash benchmarks/run_benchmark_6r.sh <REP> <rnet|rdeploy> <PC_IP> [CYCLES=180000]
+# Usage: bash benchmarks/run_benchmark_6r.sh <REP> <rnet|rdeploy|rboth> <PC_IP> [CYCLES=180000]
 #
 
 set -euo pipefail
 
 if [ "$#" -lt 3 ] || ! [[ "$1" =~ ^[1-9][0-9]*$ ]]; then
-    echo "Usage: $0 <REP>=integer>=1 <rnet|rdeploy> <PC_IP> [CYCLES=180000]" >&2
+    echo "Usage: $0 <REP>=integer>=1 <rnet|rdeploy|rboth> <PC_IP> [CYCLES=180000]" >&2
     exit 1
 fi
 
@@ -21,8 +21,8 @@ TIER="$2"
 PC_IP="$3"
 CYCLES="${4:-180000}"
 
-if [ "${TIER}" != "rnet" ] && [ "${TIER}" != "rdeploy" ]; then
-    echo "ERROR: tier must be 'rnet' or 'rdeploy', got '${TIER}'" >&2
+if [ "${TIER}" != "rnet" ] && [ "${TIER}" != "rdeploy" ] && [ "${TIER}" != "rboth" ]; then
+    echo "ERROR: tier must be 'rnet', 'rdeploy' or 'rboth', got '${TIER}'" >&2
     exit 1
 fi
 
@@ -221,7 +221,7 @@ run_real() {
     echo "# loadcheck start: ${lc_line}" >> "${env_file}"
     if [ "${lc_rc}" -ne 0 ]; then
         bash "${REALLOAD_SH}" stop || true
-        echo "ERROR: load not present for ${name}. Is pc_traffic.py running on the PC?" >&2
+        echo "ERROR: load not present for ${name}. Are the pc_traffic.py sender(s) running on the PC?" >&2
         exit 1
     fi
 

@@ -195,3 +195,68 @@ def test_compare_realload_act_tuned_and_ignores_non_realload_ipc(tmp_path):
     assert "| – | – |" in md_text
 
 
+def test_compare_realload_rboth_linux_and_act(tmp_path):
+    raw_dir = tmp_path / "raw"
+    real_r1 = raw_dir / "real_r1"
+    real_r1.mkdir(parents=True)
+
+    b_lat = np.full(10000, 0.03, dtype=np.float64)
+    b_lat[100] = 0.53  # rel max = 500 us
+    _write_linux_csv(real_r1 / "B_0_rboth.csv", b_lat)
+    (real_r1 / "analytics_B_0_rboth.csv").write_text(
+        "t_mono_ns,count,cls,infer_us\n"
+        "1000000000,1,0,35000.0\n"
+        "2000000000,2,1,45000.0\n",
+        encoding="utf-8",
+    )
+    (real_r1 / "pc_traffic_rboth_bulk.json").write_text(
+        json.dumps({"avg_rate_Bps": 6000000.0, "reconnects": 2}),
+        encoding="utf-8",
+    )
+    (real_r1 / "pc_traffic_rboth_ingest.json").write_text(
+        json.dumps({"avg_rate_Bps": 48000.0, "late_skips": 1}),
+        encoding="utf-8",
+    )
+
+    _write_c_csv(raw_dir / "act_tuned_rboth" / "C_0_act_tuned_rboth.csv")
+    (raw_dir / "act_tuned_rboth" / "config_c_env_0_act_tuned_rboth.txt").write_text(
+        "# loadcheck mid: LOADCHECK OK tier=rboth rx_Bps=5000000 inferences=55\n",
+        encoding="utf-8",
+    )
+    (raw_dir / "act_tuned_rboth" / "pc_traffic_0_act_tuned_rboth_bulk.json").write_text(
+        json.dumps({"avg_rate_Bps": 6200000.0, "reconnects": 0}),
+        encoding="utf-8",
+    )
+    (raw_dir / "act_tuned_rboth" / "pc_traffic_0_act_tuned_rboth_ingest.json").write_text(
+        json.dumps({"avg_rate_Bps": 47500.0, "late_skips": 0}),
+        encoding="utf-8",
+    )
+
+    ref_csv = tmp_path / "compare_long.csv"
+    pd.DataFrame(columns=["series", "tier", "rep", "file", "wcl_us"]).to_csv(ref_csv, index=False)
+
+    out_dir = tmp_path / "out"
+    df, md_text, chart = compare_realload.compare_realload(raw_dir, ref_csv, out_dir)
+
+    assert chart.exists()
+    assert len(df) == 2
+    assert set(df["tier"]) == {"rboth"}
+
+    b_row = df[df["series"] == "B"].iloc[0]
+    assert b_row["tier"] == "rboth"
+    assert not np.isnan(b_row["infer_count"])
+    assert b_row["infer_count"] == 2
+    assert b_row["pc_avg_rate_Bps"] == pytest.approx(6000000.0)
+    assert b_row["pc_reconnects"] == 2
+    assert b_row["pc_ingest_rate_Bps"] == pytest.approx(48000.0)
+    assert b_row["pc_ingest_late_skips"] == 1
+
+    c_row = df[df["series"] == "C act tuned"].iloc[0]
+    assert c_row["tier"] == "rboth"
+    assert c_row["pc_avg_rate_Bps"] == pytest.approx(6200000.0)
+    assert c_row["pc_ingest_rate_Bps"] == pytest.approx(47500.0)
+
+    assert "rboth" in md_text
+    assert "ingest 48000 / skips 1" in md_text
+
+

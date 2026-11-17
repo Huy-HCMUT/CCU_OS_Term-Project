@@ -124,3 +124,35 @@ def test_analyze_drive_lost_wrong_and_u32_rollover(tmp_path):
     assert r["chain_bound_ms"] == pytest.approx(expected_cb)
     assert "upper bound (sum of p99s: send → stored, ≤ 1 tick wait, tick → drive sees it)" in md_text
 
+
+def test_analyze_drive_finds_rboth_tier(tmp_path):
+    raw_dir = tmp_path / "raw"
+    folder = raw_dir / "act_tuned_rboth"
+    tag = "0_act_tuned_rboth"
+    _make_base_run(folder, tag=tag, n_cycles=10, seq_sps={2: 80})
+
+    act_rows = [(2, 1000 + 2 * 1600000 + 80000, 320, 80)]
+    with open(folder / f"config_c_act_{tag}.csv", "w", encoding="utf-8", newline="") as f:
+        f.write("# act_count=1\n")
+        pd.DataFrame(act_rows, columns=["cycle", "t_write_cyc", "cost_cyc", "setpoint_pct"]).to_csv(f, index=False)
+
+    drive_rows = [(0, 2, 1000, 161000, 365800, 204800, 320000)]
+    with open(folder / f"config_c_drive_{tag}.csv", "w", encoding="utf-8", newline="") as f:
+        f.write(
+            "# ticks=10 tick_min_cyc=1599900 tick_max_cyc=1600100 periods=100 "
+            "period_outliers=0 level_errors=0 initial_high_cyc=256000 events=1 events_dropped=0\n"
+        )
+        pd.DataFrame(
+            drive_rows,
+            columns=["event", "tick_idx", "tick_cyc", "rise_cyc", "fall_cyc", "high_cyc", "period_cyc"],
+        ).to_csv(f, index=False)
+
+    df, md_text = analyze_drive.analyze_drive(raw_dir, tmp_path / "out")
+
+    assert len(df) == 1
+    r = df.iloc[0]
+    assert r["tier"] == "rboth"
+    assert r["tag"] == tag
+    assert r["lost"] == 0 and r["wrong"] == 0 and r["extra"] == 0
+    assert "| rboth | 1 | 1 | 0 | 0 | 0 |" in md_text
+

@@ -746,3 +746,74 @@ def test_act_log_wrong_cycle_exits(harness_env):
     with pytest.raises(SystemExit):
         record(sample_count=20, stress_pct=0, tag="0_act_tuned", variant="act")
 
+
+# --- Phase 6b D13: load tier rboth ---
+
+def test_act_rboth_files(harness_env):
+    mod, record, _, tmp_path = harness_env
+    cmds = record(
+        sample_count=20,
+        stress_pct=0,
+        tag="0_act_tuned_rboth",
+        variant="act",
+        rep=2,
+        load="rboth",
+        dut_ip="192.168.1.50",
+        pc_ip="192.168.1.10",
+    )
+    out_dir = tmp_path / "act_tuned_rboth_r2"
+    assert (out_dir / "C_0_act_tuned_rboth.csv").exists()
+    assert (out_dir / "config_c_drive_0_act_tuned_rboth.csv").exists()
+
+    cmd_strings = _cmd_strings(cmds)
+    assert any("realload.sh start rboth" in c for c in cmd_strings)
+    assert any("realload.sh check rboth" in c for c in cmd_strings)
+
+    popen_cmds = [[str(x) for x in e[1]] for e in cmds if e[0] == "popen"]
+    assert len(popen_cmds) == 2
+    assert "bulk" in popen_cmds[0]
+    assert any(arg.endswith("pc_traffic_0_act_tuned_rboth_bulk.json") for arg in popen_cmds[0])
+    assert "ingest" in popen_cmds[1]
+    assert any(arg.endswith("pc_traffic_0_act_tuned_rboth_ingest.json") for arg in popen_cmds[1])
+
+
+def test_rboth_needs_ips():
+    res = subprocess.run(
+        [sys.executable, str(HARNESS_PATH), "act-rboth", "--pc-ip", "192.168.1.10"],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode != 0
+    assert "--dut-ip" in res.stdout
+
+
+def test_stop_realload_terminates_all(monkeypatch):
+    mod = load_harness()
+    sent = []
+
+    class FakeProc:
+        def __init__(self):
+            self.terminated = 0
+            self.waited = []
+
+        def terminate(self):
+            self.terminated += 1
+
+        def wait(self, timeout=None):
+            self.waited.append(timeout)
+
+    p1, p2 = FakeProc(), FakeProc()
+    monkeypatch.setattr(mod, "run_adb", lambda device, cmd: sent.append((device, cmd)) or "")
+    monkeypatch.setattr(
+        mod,
+        "_REALLOAD",
+        {"procs": [p1, p2], "raw_dir": None, "outdir": None, "active": True},
+    )
+
+    mod._stop_realload()
+
+    assert p1.terminated == 1 and p1.waited == [5]
+    assert p2.terminated == 1 and p2.waited == [5]
+    assert mod._REALLOAD["procs"] == []
+    assert any("realload.sh stop" in cmd for _, cmd in sent)
+
