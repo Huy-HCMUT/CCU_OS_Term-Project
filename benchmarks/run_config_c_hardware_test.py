@@ -16,6 +16,9 @@ ADB = r"C:\Users\Hyen\platform-tools\adb.exe"
 DUT_ID = "3125036249"
 REF_ID = "253074993"
 RAW_DIR = Path(__file__).resolve().parent.parent / "results" / "raw"
+BOARD_REPO = "/home/arduino/CCU_OS_Term-Project"
+
+_REALLOAD = {"proc": None, "raw_dir": None, "outdir": None, "active": False}
 
 def run_adb(device, cmd):
     res = subprocess.run([ADB, "-s", device, "shell", cmd], capture_output=True, text=True)
@@ -141,8 +144,42 @@ def _pull_with_retry(device, remote, local, min_rows, strict):
         subprocess.run([ADB, "-s", device, "pull", remote, str(local)], capture_output=True)
 
 
+def _stop_realload():
+    """Stop PC traffic generator, stop board realload.sh, and pull board artifacts. Safe to call twice."""
+    proc = _REALLOAD.get("proc")
+    raw_dir = _REALLOAD.get("raw_dir")
+    outdir = _REALLOAD.get("outdir")
+    active = _REALLOAD.get("active", False)
+    if not active and proc is None:
+        return
+    _REALLOAD["active"] = False
+    _REALLOAD["proc"] = None
+    _REALLOAD["raw_dir"] = None
+    _REALLOAD["outdir"] = None
+    if proc is not None:
+        try:
+            proc.terminate()
+            proc.wait(timeout=5)
+        except Exception:
+            try:
+                proc.kill()
+                proc.wait(timeout=2)
+            except Exception:
+                pass
+    run_adb(DUT_ID, f"bash {BOARD_REPO}/benchmarks/realload/realload.sh stop")
+    if outdir and raw_dir is not None:
+        res = subprocess.run(
+            [ADB, "-s", DUT_ID, "pull", f"{outdir}/.", str(raw_dir)],
+            capture_output=True,
+            text=True,
+        )
+        if res is not None and getattr(res, "returncode", 0) != 0:
+            err = (getattr(res, "stderr", "") or "").strip()
+            print(f"      WARNING: could not pull {outdir}/. ({err})")
+
+
 def _abort_run(msg, dut, tag, stress_pct, is_ipc, kill_stress=None):
-    """Stop everything this run started (sender, stress-ng, referee capture), then exit. No local files exist yet."""
+    """Stop everything this run started (sender, stress-ng, realistic load, referee capture), then exit. No local files exist yet."""
     print(f"ERROR: {msg}")
     print("      Cleaning up: stopping sender / stress-ng / referee capture...")
     if is_ipc:
@@ -150,6 +187,7 @@ def _abort_run(msg, dut, tag, stress_pct, is_ipc, kill_stress=None):
     if (stress_pct > 0) if kill_stress is None else kill_stress:
         run_adb(DUT_ID, "killall -9 stress-ng 2>/dev/null")
         run_adb(DUT_ID, "sudo pkill -9 stress-ng 2>/dev/null")
+    _stop_realload()
     run_adb(REF_ID, f"docker exec {REF_CONTAINER} sh -c \"echo 'STOP /home/arduino/referee_{tag}_aborted.csv' > /tmp/referee_cmd\"")
     print("      No data files were written for this tag. Fix the cause (app running? USB?), then run the same command again.")
     sys.exit(1)
@@ -261,6 +299,8 @@ def _variant_raw_dir(variant, rep=1, load="core0"):
     base = VARIANTS[variant]["raw_base"]
     if load == "allcore":
         base = f"{base}_allcore"
+    elif load in ("rnet", "rdeploy"):
+        base = f"{base}_{load}"
     return RAW_DIR / (base if rep == 1 else f"{base}_r{rep}")
 
 
@@ -329,16 +369,20 @@ def check_preflight(variant=None):
     print("-" * 75)
 
 
-def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None, rep=1, load="core0", folder_load=None):
-    if load not in ("core0", "allcore"):
+def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None, rep=1, load="core0", folder_load=None, dut_ip=None, pc_ip=None):
+    if load not in ("core0", "allcore", "rnet", "rdeploy"):
         print(f"ERROR: invalid load '{load}'")
         sys.exit(1)
     if load == "allcore" and (variant not in VARIANTS or stress_pct != 100):
         print("ERROR: load='allcore' requires a variant and stress_pct=100")
         sys.exit(1)
+    if load in ("rnet", "rdeploy") and (variant not in VARIANTS or stress_pct != 0 or not dut_ip or not pc_ip):
+        print(f"ERROR: load='{load}' requires a variant, stress_pct=0, --dut-ip and --pc-ip")
+        sys.exit(1)
     if folder_load is None:
         folder_load = load
 
+    is_realload = load in ("rnet", "rdeploy")
     is_ipc = variant in VARIANTS and VARIANTS[variant]["kind"] == "ipc"
     dut = IPC_CONTAINER if is_ipc else DUT_CONTAINER
     if variant is None:
@@ -346,7 +390,8 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
         std_tag = str(stress_pct)
     else:
         raw_dir = _variant_raw_dir(variant, rep, load=folder_load)
-        tag_sfx = VARIANTS[variant]["tag_suffix"] + ("_allcore" if load == "allcore" else "")
+        extra_sfx = f"_{load}" if load in ("allcore", "rnet", "rdeploy") else ""
+        tag_sfx = VARIANTS[variant]["tag_suffix"] + extra_sfx
         std_tag = f"{stress_pct}{tag_sfx}"
 
     if tag is None:
@@ -357,233 +402,274 @@ def run_dual_benchmark(sample_count=10000, stress_pct=0, tag=None, variant=None,
     raw_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n>>> EXECUTING CONFIG C RUN: count={sample_count}, stress={stress_pct}%, tag={tag}")
 
-    # 1. Arm Referee
-    print(f"[1/5] Arming Referee for {sample_count} pulses...")
-    run_adb(REF_ID, f"docker exec {REF_CONTAINER} sh -c \"echo 'START {sample_count}' > /tmp/referee_cmd\"")
-    time.sleep(0.5)
-    if strict:
-        ref_st = ""
-        for _ in range(REF_ARM_POLLS):
-            ref_st = run_adb(REF_ID, f"docker exec {REF_CONTAINER} cat /tmp/referee_status")
-            if ref_st.startswith("RECORDING"):
-                break
-            time.sleep(0.5)
-        if not ref_st.startswith("RECORDING"):
-            print(f"ERROR: referee did not start recording (status '{ref_st}').")
-            print("      No data files were written for this tag. Check referee_bench and the USB cable, then run the same command again.")
-            sys.exit(1)
-
-    if is_ipc:
-        run_adb(DUT_ID, f"docker exec {dut} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('reset_ipc', 0))\"")
-        run_adb(DUT_ID, f"docker exec {dut} sh -c \"echo 'START' > /tmp/sender_cmd\"")
-        time.sleep(1.0)
-
-    if load == "allcore":
-        print("[2/5] Starting ALL-CORE Linux stress on Board 1 (stress-ng, 4 CPU workers, not pinned)...")
-        subprocess.Popen([ADB, "-s", DUT_ID, "shell", "stress-ng --cpu 4 --cache 2 --hdd 1 --vm 1 --vm-bytes 50% --quiet"])
-        time.sleep(2.0)
-    elif stress_pct == 50:
-        print("[2/5] Starting 50% Linux CPU, IO & Memory stress on Board 1 (stress-ng)...")
-        subprocess.Popen([ADB, "-s", DUT_ID, "shell", "stress-ng --cpu 1 --taskset 0 --hdd 1 --vm 1 --vm-bytes 25% --quiet"])
-        time.sleep(2.0)
-    elif stress_pct == 100:
-        print("[2/5] Starting 100% Linux Storm stress on Board 1 (stress-ng CPU, Cache, HDD, VM)...")
-        subprocess.Popen([ADB, "-s", DUT_ID, "shell", "stress-ng --cpu 2 --taskset 0 --cache 2 --hdd 1 --vm 1 --vm-bytes 50% --quiet"])
-        time.sleep(2.0)
-    else:
-        print("[2/5] Baseline operation (no stress-ng load)...")
-
-    env_samples = []
-    if strict:
-        env = _sample_env("start")
-        if env is None:
-            _abort_run("could not read the Linux load state on the DUT (adb?).", dut, tag, stress_pct, is_ipc)
-        problem = _stress_state_problem(env, stress_pct, load=load)
-        if problem:
-            _abort_run(problem + ".", dut, tag, stress_pct, is_ipc, kill_stress=True)
-        env_samples.append(env)
-
-    # 3. Trigger Board 1
-    print(f"[3/5] Triggering {sample_count} periodic cycles on Board 1 STM32...")
-    out = run_adb(DUT_ID, f"docker exec {dut} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('start_zephyr_pulses', {sample_count}))\"")
-    print(f"      DUT trigger response: {out}")
-    if strict and out.strip() != "1":
-        _abort_run(f"DUT did not start the pulses (start_zephyr_pulses returned '{out}').", dut, tag, stress_pct, is_ipc)
-
-    # Wait for test to complete (10 ms per pulse + 2.5s overhead)
-    wait_time = (sample_count * 0.010) + 2.5
-    print(f"      Waiting {wait_time:.1f}s for cycle completion...")
-    if strict:
-        # Second Linux load sample halfway through the timed run (Linux side only).
-        t0 = time.monotonic()
-        time.sleep(wait_time / 2)
-        env = _sample_env("mid")
-        if env is None:
-            print("      WARNING: mid-run Linux load sample failed; it is recorded as missing.")
-        else:
-            env_samples.append(env)
-        time.sleep(max(0.0, wait_time - (time.monotonic() - t0)))
-    else:
-        time.sleep(wait_time)
-
-    if is_ipc:
-        run_adb(DUT_ID, f"docker exec {dut} sh -c \"echo 'STOP /home/arduino/sender_{tag}.csv' > /tmp/sender_cmd\"")
-        for _ in range(20):
-            time.sleep(0.5)
-            st_sender = run_adb(DUT_ID, f"docker exec {dut} cat /tmp/sender_status")
-            if st_sender.startswith("STOPPED") or "ERROR" in st_sender:
-                print(f"      Sender status: {st_sender}")
-                break
-
-    if stress_pct > 0:
-        print("      Stopping stress-ng on Board 1...")
-        run_adb(DUT_ID, "killall -9 stress-ng 2>/dev/null")
-        run_adb(DUT_ID, "sudo pkill -9 stress-ng 2>/dev/null")
-        time.sleep(1.0)
-
-    # 4. Stop Referee
-    print("[4/5] Stopping Referee capture...")
-    ref_remote_csv = f"/home/arduino/referee_{tag}.csv"
-    run_adb(REF_ID, f"docker exec {REF_CONTAINER} sh -c \"echo 'STOP {ref_remote_csv}' > /tmp/referee_cmd\"")
-
-    # Wait for Referee daemon to finish fetching deltas and writing CSV (up to 45s)
-    for _ in range(90):
+    mid_loadcheck = None
+    try:
+        # 1. Arm Referee
+        print(f"[1/5] Arming Referee for {sample_count} pulses...")
+        run_adb(REF_ID, f"docker exec {REF_CONTAINER} sh -c \"echo 'START {sample_count}' > /tmp/referee_cmd\"")
         time.sleep(0.5)
-        st = run_adb(REF_ID, f"docker exec {REF_CONTAINER} cat /tmp/referee_status")
-        if st.startswith("STOPPED") or "ERROR" in st:
-            print(f"      Referee status: {st}")
-            break
+        if strict:
+            ref_st = ""
+            for _ in range(REF_ARM_POLLS):
+                ref_st = run_adb(REF_ID, f"docker exec {REF_CONTAINER} cat /tmp/referee_status")
+                if ref_st.startswith("RECORDING"):
+                    break
+                time.sleep(0.5)
+            if not ref_st.startswith("RECORDING"):
+                print(f"ERROR: referee did not start recording (status '{ref_st}').")
+                print("      No data files were written for this tag. Check referee_bench and the USB cable, then run the same command again.")
+                sys.exit(1)
 
-    # 5. Retrieve data from both boards
-    print("[5/5] Retrieving data from both boards...")
-
-    # 5A. Pull Referee CSV
-    local_ref_csv = raw_dir / f"config_c_referee_{tag}.csv"
-    run_adb(REF_ID, f"docker cp {REF_CONTAINER}:{ref_remote_csv} {ref_remote_csv}")
-    _pull_with_retry(REF_ID, ref_remote_csv, local_ref_csv, sample_count, strict)
-
-    # 5B. Fetch DWT records from Board 1
-    print("      Fetching DWT records from Board 1 STM32...")
-    dwt_cycles = _fetch_chunks(dut, "get_dwt_chunk", sample_count, strict)
-
-    # Save detailed diagnostic DWT CSV
-    local_dwt_csv = raw_dir / f"config_c_dwt_{tag}.csv"
-    with open(local_dwt_csv, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["cycle", "dwt_cyccnt", "dwt_delta_cyc", "dwt_period_us", "dwt_lateness_ms"])
-        c0 = dwt_cycles[0] if dwt_cycles else 0
-        for i, cyc in enumerate(dwt_cycles):
-            d_cyc = ((cyc - dwt_cycles[i-1]) & 0xFFFFFFFF) if i > 0 else 1600000
-            p_us = d_cyc / 160.0
-            sched_target = (c0 + (i * 1600000)) & 0xFFFFFFFF
-            lateness_ms = (((cyc - sched_target) & 0xFFFFFFFF) if cyc >= sched_target else -(((sched_target - cyc) & 0xFFFFFFFF))) / 160000.0
-            writer.writerow([i, cyc, d_cyc, f"{p_us:.3f}", f"{lateness_ms:.5f}"])
-
-    print(f"      Saved {len(dwt_cycles)} DWT records to {local_dwt_csv.name}")
-    print(f"      Saved Referee records to {local_ref_csv.name}")
-
-    if is_ipc:
-        print("      Fetching applied setpoints (seq_chunk) from Board 1 STM32...")
-        seq_words = _fetch_chunks(dut, "get_seq_chunk", sample_count, strict)
-
-        cmd_rx = f"docker exec {dut} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('get_rx_count', 0))\""
-        rx_count_str = run_adb(DUT_ID, cmd_rx).strip()
-        attempt = 0
-        while strict and not _is_int(rx_count_str) and attempt < READOUT_RETRIES:
-            attempt += 1
-            print(f"      WARNING: get_rx_count returned '{rx_count_str[:60]}'; retry {attempt}/{READOUT_RETRIES}...")
-            time.sleep(READOUT_RETRY_DELAY_S)
-            rx_count_str = run_adb(DUT_ID, cmd_rx).strip()
-
-        sender_remote_csv = f"/home/arduino/sender_{tag}.csv"
-        local_sender_csv = raw_dir / f"config_c_ipc_sender_{tag}.csv"
-        run_adb(DUT_ID, f"docker cp {dut}:{sender_remote_csv} {sender_remote_csv}")
-        _pull_with_retry(DUT_ID, sender_remote_csv, local_sender_csv, 1, strict)
-
-        local_seq_csv = raw_dir / f"config_c_ipc_seq_{tag}.csv"
-        with open(local_seq_csv, "w", newline="") as f:
-            f.write(f"# rx_count={rx_count_str}\n")
-            writer = csv.writer(f)
-            writer.writerow(["cycle", "applied_seq", "applied_setpoint_pct"])
-            for i, w in enumerate(seq_words):
-                writer.writerow([i, w >> 8, w & 0xFF])
-        print(f"      Saved IPC seq records to {local_seq_csv.name}")
-
-    # Standardized output
-    if tag == std_tag:
-        if variant is None:
-            std_dwt_csv = raw_dir / f"C_{stress_pct}_dwt.csv"
-            with open(std_dwt_csv, "w", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(["cycle", "wake_cyc"])
-                for i, cyc in enumerate(dwt_cycles):
-                    writer.writerow([i, cyc])
-            print(f"      Standardized DWT output: {std_dwt_csv.name}")
-
-            if local_ref_csv.exists():
-                with open(local_ref_csv, "r") as f:
-                    ref_rows = list(csv.DictReader(f))
-                std_ref_csv = raw_dir / f"C_{stress_pct}_referee.csv"
-                with open(std_ref_csv, "w", newline="") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(["cycle", "wake_us"])
-                    cum_us = 0.0
-                    # Skip index 0 (initial arming latency)
-                    for i, r in enumerate(ref_rows[1:]):
-                        cum_us += float(r["interval_us"])
-                        writer.writerow([i, cum_us])
-                print(f"      Standardized Referee output: {std_ref_csv.name}")
-        else:
-            std_dwt_csv = raw_dir / f"C_{std_tag}.csv"
-            with open(std_dwt_csv, "w", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(["cycle", "wake_cyc"])
-                for i, cyc in enumerate(dwt_cycles):
-                    writer.writerow([i, cyc])
-            print(f"      Standardized DWT output: {std_dwt_csv.name}")
-
-    # Process and print cross-correlation summary
-    analyze_dual_data(local_dwt_csv, local_ref_csv, tag)
-
-    # Completeness check (variant modes): stop the matrix instead of continuing with partial data.
-    if strict:
-        env_path = raw_dir / f"config_c_env_{tag}.txt"
-        with open(env_path, "w") as f:
-            f.write(f"# Linux-side load samples on the DUT for tag {tag} (stress {stress_pct}%). "
-                    "busy = 1 - d(idle+iowait)/d(total) over 1 s from /proc/stat.\n")
-            for e in env_samples:
-                f.write(_format_env(e) + "\n")
-            if not any(e["sample"] == "mid" for e in env_samples):
-                f.write("sample=mid missing\n")
-        print(f"      Saved Linux load samples to {env_path.name}")
-
-        problems = []
-        for e in env_samples:
-            if e["sample"] == "mid":
-                p = _stress_state_problem(e, stress_pct, load=load)
-                if p:
-                    problems.append(f"mid-run: {p}")
-        if len(dwt_cycles) != sample_count:
-            problems.append(f"DWT {len(dwt_cycles)}/{sample_count}")
-        n_ref = _count_csv_rows(local_ref_csv)
-        if n_ref != sample_count:
-            problems.append(f"referee {n_ref}/{sample_count}")
         if is_ipc:
-            if len(seq_words) != sample_count:
-                problems.append(f"seq {len(seq_words)}/{sample_count}")
-            if not _is_int(rx_count_str):
-                problems.append(f"rx_count '{rx_count_str}'")
-            if _count_csv_rows(local_sender_csv) < 1:
-                problems.append("sender CSV empty or missing")
-        if problems:
-            level = "allcore" if load == "allcore" else ("sanity" if tag.startswith("sanity") else str(stress_pct))
-            rep_arg = f" --rep {rep}" if rep != 1 else ""
-            print(f"ERROR: incomplete data for tag {tag} in {raw_dir}: {', '.join(problems)}.")
-            print("       The files were kept. Ask Claude to move this tag's files to results/raw/archive/,")
-            print(f"       then re-run only this level: {variant}-{level}{rep_arg}")
-            sys.exit(1)
-        print(f"      Completeness check OK: {sample_count} DWT + {n_ref} referee records" + (f" + {len(seq_words)} seq" if is_ipc else "")
-              + f"; Linux load matches {stress_pct}% ({len(env_samples)} samples)")
+            run_adb(DUT_ID, f"docker exec {dut} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('reset_ipc', 0))\"")
+            run_adb(DUT_ID, f"docker exec {dut} sh -c \"echo 'START' > /tmp/sender_cmd\"")
+            time.sleep(1.0)
+
+        if is_realload:
+            print(f"[2/5] Starting REALISTIC load '{load}' (board load kit + PC traffic)...")
+            board_outdir = f"/home/arduino/realload_out/{raw_dir.name}"
+            _REALLOAD["raw_dir"] = raw_dir
+            _REALLOAD["outdir"] = board_outdir
+            _REALLOAD["active"] = True
+            run_adb(DUT_ID, f"bash {BOARD_REPO}/benchmarks/realload/realload.sh start {load} {tag} {board_outdir} {pc_ip}")
+            traffic_mode = "bulk" if load == "rnet" else "ingest"
+            traffic_proc = subprocess.Popen(
+                [
+                    sys.executable,
+                    str(Path(__file__).parent / "realload" / "pc_traffic.py"),
+                    traffic_mode,
+                    "--host",
+                    dut_ip,
+                    "--duration",
+                    "900",
+                    "--out",
+                    str(raw_dir / f"pc_traffic_{tag}.json"),
+                ]
+            )
+            _REALLOAD["proc"] = traffic_proc
+            time.sleep(30.0)
+            lc_out = run_adb(DUT_ID, f"bash {BOARD_REPO}/benchmarks/realload/realload.sh check {load}")
+            if "LOADCHECK OK" not in lc_out:
+                _abort_run(f"realistic load not present ({lc_out.strip()})", dut, tag, stress_pct, is_ipc)
+        elif load == "allcore":
+            print("[2/5] Starting ALL-CORE Linux stress on Board 1 (stress-ng, 4 CPU workers, not pinned)...")
+            subprocess.Popen([ADB, "-s", DUT_ID, "shell", "stress-ng --cpu 4 --cache 2 --hdd 1 --vm 1 --vm-bytes 50% --quiet"])
+            time.sleep(2.0)
+        elif stress_pct == 50:
+            print("[2/5] Starting 50% Linux CPU, IO & Memory stress on Board 1 (stress-ng)...")
+            subprocess.Popen([ADB, "-s", DUT_ID, "shell", "stress-ng --cpu 1 --taskset 0 --hdd 1 --vm 1 --vm-bytes 25% --quiet"])
+            time.sleep(2.0)
+        elif stress_pct == 100:
+            print("[2/5] Starting 100% Linux Storm stress on Board 1 (stress-ng CPU, Cache, HDD, VM)...")
+            subprocess.Popen([ADB, "-s", DUT_ID, "shell", "stress-ng --cpu 2 --taskset 0 --cache 2 --hdd 1 --vm 1 --vm-bytes 50% --quiet"])
+            time.sleep(2.0)
+        else:
+            print("[2/5] Baseline operation (no stress-ng load)...")
+
+        env_samples = []
+        if strict:
+            env = _sample_env("start")
+            if env is None:
+                _abort_run("could not read the Linux load state on the DUT (adb?).", dut, tag, stress_pct, is_ipc)
+            problem = _stress_state_problem(env, stress_pct, load=load)
+            if problem:
+                _abort_run(problem + ".", dut, tag, stress_pct, is_ipc, kill_stress=True)
+            env_samples.append(env)
+
+        # 3. Trigger Board 1
+        print(f"[3/5] Triggering {sample_count} periodic cycles on Board 1 STM32...")
+        out = run_adb(DUT_ID, f"docker exec {dut} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('start_zephyr_pulses', {sample_count}))\"")
+        print(f"      DUT trigger response: {out}")
+        if strict and out.strip() != "1":
+            _abort_run(f"DUT did not start the pulses (start_zephyr_pulses returned '{out}').", dut, tag, stress_pct, is_ipc)
+
+        # Wait for test to complete (10 ms per pulse + 2.5s overhead)
+        wait_time = (sample_count * 0.010) + 2.5
+        print(f"      Waiting {wait_time:.1f}s for cycle completion...")
+        if strict:
+            # Second Linux load sample halfway through the timed run (Linux side only).
+            t0 = time.monotonic()
+            time.sleep(wait_time / 2)
+            env = _sample_env("mid")
+            if env is None:
+                print("      WARNING: mid-run Linux load sample failed; it is recorded as missing.")
+            else:
+                env_samples.append(env)
+            if is_realload:
+                mid_loadcheck = run_adb(DUT_ID, f"bash {BOARD_REPO}/benchmarks/realload/realload.sh check {load}").strip()
+                print(f"      Realistic load [mid]: {mid_loadcheck}")
+            time.sleep(max(0.0, wait_time - (time.monotonic() - t0)))
+        else:
+            time.sleep(wait_time)
+
+        if is_ipc:
+            run_adb(DUT_ID, f"docker exec {dut} sh -c \"echo 'STOP /home/arduino/sender_{tag}.csv' > /tmp/sender_cmd\"")
+            for _ in range(20):
+                time.sleep(0.5)
+                st_sender = run_adb(DUT_ID, f"docker exec {dut} cat /tmp/sender_status")
+                if st_sender.startswith("STOPPED") or "ERROR" in st_sender:
+                    print(f"      Sender status: {st_sender}")
+                    break
+
+        if is_realload:
+            print(f"      Stopping realistic load '{load}' on Board 1 & PC...")
+            _stop_realload()
+        elif stress_pct > 0:
+            print("      Stopping stress-ng on Board 1...")
+            run_adb(DUT_ID, "killall -9 stress-ng 2>/dev/null")
+            run_adb(DUT_ID, "sudo pkill -9 stress-ng 2>/dev/null")
+            time.sleep(1.0)
+
+        # 4. Stop Referee
+        print("[4/5] Stopping Referee capture...")
+        ref_remote_csv = f"/home/arduino/referee_{tag}.csv"
+        run_adb(REF_ID, f"docker exec {REF_CONTAINER} sh -c \"echo 'STOP {ref_remote_csv}' > /tmp/referee_cmd\"")
+
+        # Wait for Referee daemon to finish fetching deltas and writing CSV (up to 45s)
+        for _ in range(90):
+            time.sleep(0.5)
+            st = run_adb(REF_ID, f"docker exec {REF_CONTAINER} cat /tmp/referee_status")
+            if st.startswith("STOPPED") or "ERROR" in st:
+                print(f"      Referee status: {st}")
+                break
+
+        # 5. Retrieve data from both boards
+        print("[5/5] Retrieving data from both boards...")
+
+        # 5A. Pull Referee CSV
+        local_ref_csv = raw_dir / f"config_c_referee_{tag}.csv"
+        run_adb(REF_ID, f"docker cp {REF_CONTAINER}:{ref_remote_csv} {ref_remote_csv}")
+        _pull_with_retry(REF_ID, ref_remote_csv, local_ref_csv, sample_count, strict)
+
+        # 5B. Fetch DWT records from Board 1
+        print("      Fetching DWT records from Board 1 STM32...")
+        dwt_cycles = _fetch_chunks(dut, "get_dwt_chunk", sample_count, strict)
+
+        # Save detailed diagnostic DWT CSV
+        local_dwt_csv = raw_dir / f"config_c_dwt_{tag}.csv"
+        with open(local_dwt_csv, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["cycle", "dwt_cyccnt", "dwt_delta_cyc", "dwt_period_us", "dwt_lateness_ms"])
+            c0 = dwt_cycles[0] if dwt_cycles else 0
+            for i, cyc in enumerate(dwt_cycles):
+                d_cyc = ((cyc - dwt_cycles[i-1]) & 0xFFFFFFFF) if i > 0 else 1600000
+                p_us = d_cyc / 160.0
+                sched_target = (c0 + (i * 1600000)) & 0xFFFFFFFF
+                lateness_ms = (((cyc - sched_target) & 0xFFFFFFFF) if cyc >= sched_target else -(((sched_target - cyc) & 0xFFFFFFFF))) / 160000.0
+                writer.writerow([i, cyc, d_cyc, f"{p_us:.3f}", f"{lateness_ms:.5f}"])
+
+        print(f"      Saved {len(dwt_cycles)} DWT records to {local_dwt_csv.name}")
+        print(f"      Saved Referee records to {local_ref_csv.name}")
+
+        if is_ipc:
+            print("      Fetching applied setpoints (seq_chunk) from Board 1 STM32...")
+            seq_words = _fetch_chunks(dut, "get_seq_chunk", sample_count, strict)
+
+            cmd_rx = f"docker exec {dut} python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('get_rx_count', 0))\""
+            rx_count_str = run_adb(DUT_ID, cmd_rx).strip()
+            attempt = 0
+            while strict and not _is_int(rx_count_str) and attempt < READOUT_RETRIES:
+                attempt += 1
+                print(f"      WARNING: get_rx_count returned '{rx_count_str[:60]}'; retry {attempt}/{READOUT_RETRIES}...")
+                time.sleep(READOUT_RETRY_DELAY_S)
+                rx_count_str = run_adb(DUT_ID, cmd_rx).strip()
+
+            sender_remote_csv = f"/home/arduino/sender_{tag}.csv"
+            local_sender_csv = raw_dir / f"config_c_ipc_sender_{tag}.csv"
+            run_adb(DUT_ID, f"docker cp {dut}:{sender_remote_csv} {sender_remote_csv}")
+            _pull_with_retry(DUT_ID, sender_remote_csv, local_sender_csv, 1, strict)
+
+            local_seq_csv = raw_dir / f"config_c_ipc_seq_{tag}.csv"
+            with open(local_seq_csv, "w", newline="") as f:
+                f.write(f"# rx_count={rx_count_str}\n")
+                writer = csv.writer(f)
+                writer.writerow(["cycle", "applied_seq", "applied_setpoint_pct"])
+                for i, w in enumerate(seq_words):
+                    writer.writerow([i, w >> 8, w & 0xFF])
+            print(f"      Saved IPC seq records to {local_seq_csv.name}")
+
+        # Standardized output
+        if tag == std_tag:
+            if variant is None:
+                std_dwt_csv = raw_dir / f"C_{stress_pct}_dwt.csv"
+                with open(std_dwt_csv, "w", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["cycle", "wake_cyc"])
+                    for i, cyc in enumerate(dwt_cycles):
+                        writer.writerow([i, cyc])
+                print(f"      Standardized DWT output: {std_dwt_csv.name}")
+
+                if local_ref_csv.exists():
+                    with open(local_ref_csv, "r") as f:
+                        ref_rows = list(csv.DictReader(f))
+                    std_ref_csv = raw_dir / f"C_{stress_pct}_referee.csv"
+                    with open(std_ref_csv, "w", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(["cycle", "wake_us"])
+                        cum_us = 0.0
+                        # Skip index 0 (initial arming latency)
+                        for i, r in enumerate(ref_rows[1:]):
+                            cum_us += float(r["interval_us"])
+                            writer.writerow([i, cum_us])
+                    print(f"      Standardized Referee output: {std_ref_csv.name}")
+            else:
+                std_dwt_csv = raw_dir / f"C_{std_tag}.csv"
+                with open(std_dwt_csv, "w", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["cycle", "wake_cyc"])
+                    for i, cyc in enumerate(dwt_cycles):
+                        writer.writerow([i, cyc])
+                print(f"      Standardized DWT output: {std_dwt_csv.name}")
+
+        # Process and print cross-correlation summary
+        analyze_dual_data(local_dwt_csv, local_ref_csv, tag)
+
+        # Completeness check (variant modes): stop the matrix instead of continuing with partial data.
+        if strict:
+            env_path = raw_dir / f"config_c_env_{tag}.txt"
+            with open(env_path, "w") as f:
+                f.write(f"# Linux-side load samples on the DUT for tag {tag} (stress {stress_pct}%). "
+                        "busy = 1 - d(idle+iowait)/d(total) over 1 s from /proc/stat.\n")
+                for e in env_samples:
+                    f.write(_format_env(e) + "\n")
+                if not any(e["sample"] == "mid" for e in env_samples):
+                    f.write("sample=mid missing\n")
+                if mid_loadcheck is not None:
+                    f.write(f"# loadcheck mid: {mid_loadcheck}\n")
+            print(f"      Saved Linux load samples to {env_path.name}")
+
+            problems = []
+            for e in env_samples:
+                if e["sample"] == "mid":
+                    p = _stress_state_problem(e, stress_pct, load=load)
+                    if p:
+                        problems.append(f"mid-run: {p}")
+            if is_realload and (not mid_loadcheck or "LOADCHECK OK" not in mid_loadcheck):
+                problems.append("mid-run: realistic load not present")
+            if len(dwt_cycles) != sample_count:
+                problems.append(f"DWT {len(dwt_cycles)}/{sample_count}")
+            n_ref = _count_csv_rows(local_ref_csv)
+            if n_ref != sample_count:
+                problems.append(f"referee {n_ref}/{sample_count}")
+            if is_ipc:
+                if len(seq_words) != sample_count:
+                    problems.append(f"seq {len(seq_words)}/{sample_count}")
+                if not _is_int(rx_count_str):
+                    problems.append(f"rx_count '{rx_count_str}'")
+                if _count_csv_rows(local_sender_csv) < 1:
+                    problems.append("sender CSV empty or missing")
+            if problems:
+                level = load if load in ("allcore", "rnet", "rdeploy") else ("sanity" if tag.startswith("sanity") else str(stress_pct))
+                rep_arg = f" --rep {rep}" if rep != 1 else ""
+                print(f"ERROR: incomplete data for tag {tag} in {raw_dir}: {', '.join(problems)}.")
+                print("       The files were kept. Ask Claude to move this tag's files to results/raw/archive/,")
+                print(f"       then re-run only this level: {variant}-{level}{rep_arg}")
+                sys.exit(1)
+            print(f"      Completeness check OK: {sample_count} DWT + {n_ref} referee records" + (f" + {len(seq_words)} seq" if is_ipc else "")
+                  + f"; Linux load matches {stress_pct}% ({len(env_samples)} samples)")
+    finally:
+        if is_realload:
+            _stop_realload()
 
 def analyze_dual_data(dwt_path, ref_path, tag):
     if not dwt_path.exists() or not ref_path.exists():
@@ -637,10 +723,20 @@ def analyze_dual_data(dwt_path, ref_path, tag):
     print(f"  Final Deadline Miss Ratio (DMR): {dmr:.2f}% ({misses} / {num_cycles} misses @ 1.0 ms tolerance)")
     print("=" * 80)
 
+def _validate_ipv4(val, opt_name):
+    parts = val.split(".")
+    if len(parts) != 4 or not all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
+        print(f"ERROR: invalid {opt_name} value: {val} (expected dotted-quad IPv4)")
+        sys.exit(1)
+    return val
+
+
 def _parse_cli_args(argv):
     pos = []
     rep = 1
     rep_given = False
+    dut_ip = None
+    pc_ip = None
     i = 0
     while i < len(argv):
         arg = argv[i]
@@ -670,16 +766,34 @@ def _parse_cli_args(argv):
                 sys.exit(1)
             rep_given = True
             i += 1
+        elif arg == "--dut-ip":
+            if i + 1 >= len(argv):
+                print("ERROR: --dut-ip requires an IPv4 address")
+                sys.exit(1)
+            dut_ip = _validate_ipv4(argv[i + 1], "--dut-ip")
+            i += 2
+        elif arg.startswith("--dut-ip="):
+            dut_ip = _validate_ipv4(arg.split("=", 1)[1], "--dut-ip")
+            i += 1
+        elif arg == "--pc-ip":
+            if i + 1 >= len(argv):
+                print("ERROR: --pc-ip requires an IPv4 address")
+                sys.exit(1)
+            pc_ip = _validate_ipv4(argv[i + 1], "--pc-ip")
+            i += 2
+        elif arg.startswith("--pc-ip="):
+            pc_ip = _validate_ipv4(arg.split("=", 1)[1], "--pc-ip")
+            i += 1
         else:
             pos.append(arg)
             i += 1
     mode = pos[0].lower() if len(pos) > 0 else "sanity"
     count = int(pos[1]) if len(pos) > 1 else 10000
-    return mode, count, rep, rep_given
+    return mode, count, rep, rep_given, dut_ip, pc_ip
 
 
 if __name__ == "__main__":
-    mode, count, rep, rep_given = _parse_cli_args(sys.argv[1:])
+    mode, count, rep, rep_given, dut_ip, pc_ip = _parse_cli_args(sys.argv[1:])
     prefix, _, submode = mode.partition("-")
     variant = prefix if prefix in VARIANTS else None
 
@@ -699,6 +813,12 @@ if __name__ == "__main__":
         elif submode == "allcore":
             tags = [f"sanity{sfx}_allcore", f"100{sfx}_allcore"]
             target_load = "allcore"
+        elif submode in ("rnet", "rdeploy"):
+            if not dut_ip or not pc_ip:
+                print(f"ERROR: {mode} needs --dut-ip and --pc-ip")
+                sys.exit(1)
+            tags = [f"sanity{sfx}_{submode}", f"0{sfx}_{submode}"]
+            target_load = submode
         else:
             print(f"ERROR: unknown mode '{mode}' for variant '{variant}'")
             sys.exit(1)
@@ -745,3 +865,8 @@ if __name__ == "__main__":
             run_dual_benchmark(sample_count=20, stress_pct=0, tag=f"sanity{sfx}_allcore", variant=variant, rep=rep, load="core0", folder_load="allcore")
             time.sleep(3.0)
             run_dual_benchmark(sample_count=count, stress_pct=100, tag=f"100{sfx}_allcore", variant=variant, rep=rep, load="allcore")
+        elif submode in ("rnet", "rdeploy"):
+            print(f"\n>>> EXECUTING CONFIG C {variant.upper()} {submode.upper()} RUN (sanity + {submode} load, N={count}, rep={rep})...")
+            run_dual_benchmark(sample_count=20, stress_pct=0, tag=f"sanity{sfx}_{submode}", variant=variant, rep=rep, load="core0", folder_load=submode)
+            time.sleep(3.0)
+            run_dual_benchmark(sample_count=count, stress_pct=0, tag=f"0{sfx}_{submode}", variant=variant, rep=rep, load=submode, dut_ip=dut_ip, pc_ip=pc_ip)

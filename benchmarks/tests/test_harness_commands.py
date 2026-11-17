@@ -2,6 +2,8 @@ import importlib.util
 import json
 import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 import pytest
 
@@ -115,6 +117,10 @@ def harness_env(tmp_path, monkeypatch):
             return chunk(cmd, lambda i: (1 << 8) | 100) if state["full"] else ""
         if "get_rx_count" in cmd:
             return "0"
+        if "realload.sh check" in cmd:
+            if flag("_mock_realload_fail"):
+                return "LOADCHECK FAIL tier=rnet rx_Bps=0 inferences=-"
+            return "LOADCHECK OK tier=rnet rx_Bps=5000000 inferences=-"
         return ""
 
     def mock_popen(args, *a, **kw):
@@ -127,6 +133,8 @@ def harness_env(tmp_path, monkeypatch):
     def mock_run(args, *a, **kw):
         recorded.append(["run", args])
         if state["full"] and len(args) >= 6 and args[3] == "pull":
+            if str(args[4]).endswith("/."):
+                return None
             dest = Path(args[5])
             if "referee" in dest.name:
                 rows = state["n"] - (5 if flag("_mock_ref_short") else 0)
@@ -526,3 +534,86 @@ def test_allcore_needs_variant_and_100(harness_env):
         mod.run_dual_benchmark(sample_count=20, stress_pct=100, tag="100", variant=None, load="allcore")
     with pytest.raises(SystemExit):
         mod.run_dual_benchmark(sample_count=20, stress_pct=50, tag="50_b2_allcore", variant="b2", load="allcore")
+
+
+# --- Phase 6a: realistic load tiers rnet & rdeploy ---
+
+def test_rnet_run_files(harness_env):
+    mod, record, _, tmp_path = harness_env
+    cmds = record(
+        sample_count=20,
+        stress_pct=0,
+        tag="0_ipc_tuned_rnet",
+        variant="ipct",
+        rep=2,
+        load="rnet",
+        dut_ip="192.168.1.50",
+        pc_ip="192.168.1.10",
+    )
+    out_dir = tmp_path / "ipc_tuned_rnet_r2"
+    assert (out_dir / "C_0_ipc_tuned_rnet.csv").exists()
+    env_text = (out_dir / "config_c_env_0_ipc_tuned_rnet.txt").read_text(encoding="utf-8")
+    assert "# loadcheck mid: LOADCHECK OK" in env_text
+
+    cmd_strings = _cmd_strings(cmds)
+    idx_start = next(i for i, c in enumerate(cmd_strings) if "realload.sh start rnet" in c)
+    idx_check_start = next(i for i, c in enumerate(cmd_strings) if "realload.sh check rnet" in c)
+    idx_trigger = next(i for i, c in enumerate(cmd_strings) if "start_zephyr_pulses" in c)
+    idx_check_mid = next(i for i in range(idx_trigger + 1, len(cmd_strings)) if "realload.sh check rnet" in cmd_strings[i])
+    idx_stop = next(i for i, c in enumerate(cmd_strings) if "realload.sh stop" in c)
+    assert idx_start < idx_check_start < idx_trigger < idx_check_mid < idx_stop
+
+    popen_cmds = [e[1] for e in cmds if e[0] == "popen"]
+    assert len(popen_cmds) == 1
+    pc_cmd = [str(x) for x in popen_cmds[0]]
+    assert any("pc_traffic.py" in x for x in pc_cmd)
+    assert "bulk" in pc_cmd
+
+
+def test_rdeploy_uses_ingest(harness_env):
+    mod, record, _, tmp_path = harness_env
+    cmds = record(
+        sample_count=20,
+        stress_pct=0,
+        tag="0_ipc_tuned_rdeploy",
+        variant="ipct",
+        load="rdeploy",
+        dut_ip="192.168.1.50",
+        pc_ip="192.168.1.10",
+    )
+    assert (tmp_path / "ipc_tuned_rdeploy" / "C_0_ipc_tuned_rdeploy.csv").exists()
+    popen_cmds = [e[1] for e in cmds if e[0] == "popen"]
+    assert len(popen_cmds) == 1
+    pc_cmd = [str(x) for x in popen_cmds[0]]
+    assert any("pc_traffic.py" in x for x in pc_cmd)
+    assert "ingest" in pc_cmd
+
+
+def test_realload_check_fail_aborts(harness_env):
+    mod, record, recorded, tmp_path = harness_env
+    mod._mock_realload_fail = True
+    with pytest.raises(SystemExit):
+        record(
+            sample_count=20,
+            stress_pct=0,
+            tag="0_ipc_tuned_rnet",
+            variant="ipct",
+            load="rnet",
+            dut_ip="192.168.1.50",
+            pc_ip="192.168.1.10",
+        )
+    cmds = _cmd_strings(recorded)
+    assert not any("start_zephyr_pulses" in c for c in cmds)
+    assert any("realload.sh stop" in c for c in cmds)
+    assert not (tmp_path / "ipc_tuned_rnet" / "C_0_ipc_tuned_rnet.csv").exists()
+
+
+def test_rnet_needs_ips():
+    res = subprocess.run(
+        [sys.executable, str(HARNESS_PATH), "ipct-rnet", "--pc-ip", "192.168.1.10"],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode != 0
+    assert "--dut-ip" in res.stdout
+
