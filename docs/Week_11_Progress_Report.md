@@ -3,10 +3,10 @@
 **Course:** Operating Systems (Fall 2026) — National Chung Cheng University (CCU)  
 **Author / Lab Lead:** Quang-Huy Nguyen  
 **Sprint Window:** Week 11 (Nov 18 – 24, 2026)  
-**Execution Dates:** board runs Nov 17–18, analysis and review Nov 18, 2026  
+**Execution Dates:** board runs Nov 17–18, analysis and review Nov 18–19, 2026  
 **Target Milestone:** Milestone 3: 25-minute presentation and demo (**Dec 1, 2026**; results due Nov 28, slides Nov 29–30)
 
-> **Status (Nov 18, 2026).** All realistic-load experiments (Phase 6a) and the full chain to an emulated motor drive (Phase 6b) are **finished, analysed and reviewed**: 2 repeats of every condition, 26 measured runs. The M3 measurement work is complete. Every number below comes from a script output on `results/raw/`; the source file is named under each table. Open team items are marked **[TBD]**.
+> **Status (Nov 19, 2026).** All realistic-load experiments (Phase 6a) and the full chain to an emulated motor drive (Phase 6b) are **finished, analysed and reviewed**: 2 repeats of every condition, 26 measured runs. The M3 measurement work is complete. Every number below comes from a script output on `results/raw/`; the source file is named under each table. Open team items are marked **[TBD]**.
 
 ---
 
@@ -26,7 +26,7 @@
 *Source: `results/phase6b/realload.md` (range over the 2 repeats).*
 
 Three headline findings:
-1. **Only the MCU keeps the deadline.** Config C's worst case is 150–200× smaller than the best Linux setup (B) and ≈ 1,000× smaller than default Linux (A), and it barely changes with load (6.3–10.5 µs from idle to the heaviest load).
+1. **Only the MCU keeps the deadline.** Config C's worst case is about 140–200× smaller than the best Linux setup (B; 165× on the means) and ≈ 1,000× smaller than default Linux (A), and it barely changes with load (6.3–10.5 µs from idle to the heaviest load).
 2. **Every command arrives.** All 1,920 speed commands of the 8 Config C runs reached the emulated drive: 0 lost, 0 wrong, 0 extra; the drive saw each new command 1.47–4.11 ms after the tick.
 3. **Isolating a core is not enough on a stock kernel.** B-iso (control thread alone on core 3) was *worse* than plain B under the combined load; the kernel's own work still reaches the reserved core, which was ≈ 24 % busy although all our load ran on the other cores.
 
@@ -83,7 +83,7 @@ In such a cell, the work splits into four layers with very different timing need
 | :--- | :--- | :--- |
 | **A** | Linux thread, default scheduler `SCHED_OTHER` (EEVDF since kernel 6.6, previously CFS) | Shares the CPUs fairly with everything else |
 | **B** | Linux thread, `SCHED_FIFO` priority 90 + `mlockall` | Preempts every normal program; memory locked |
-| **B-iso** | B, pinned to core 3 | Our load, the sampler and the movable interrupts (51 of 81) moved to cores 0–2; CPU idle states off. Isolation by affinity only: no `isolcpus` / `nohz_full` at boot |
+| **B-iso** | B, pinned to core 3 | Our load, the sampler and the movable interrupts (51 of 81) moved to cores 0–2 (the analytics thread to core 2); CPU idle states off. Isolation by affinity only: no `isolcpus` / `nohz_full` at boot |
 | **C act** | MCU loop at thread priority 4 (above the RouterBridge thread) | Linux only computes setpoints and sends them over RouterBridge ("latest value wins"); the MCU applies them every tick and outputs them as PWM on D3 |
 
 In every config the loop does the same minimal work; the FFT analytics run separately (Linux thread in A/B, Linux app in C), so only the OS behaviour differs.
@@ -109,7 +109,7 @@ The CNN uses random weights on purpose: it is realistic background work, not a f
 | `rdeploy` | 64.1 % | 63.7 % | 62.6 % | 64.9 % |
 | `rboth` | 71.3 % | 71.4 % | 70.4 % | 71.8 % |
 
-`rnet` is a network and interrupt load, not a CPU load: the board is 93–95 % idle. The CNN tiers keep it about two-thirds busy on average, with at least one core near 100 % almost all the time; part of that is the CNN's threads spin-waiting (§8). The load is about the same for all four configs (within 2.3 percentage points), so they were tested under equal conditions. C's `rnet` value is higher because its Linux side also runs the analytics app and its runs are only ≈ 2 min (14 samples instead of 182).
+`rnet` is a network and interrupt load, not a CPU load: the board is 93–95 % idle. The CNN tiers keep it about two-thirds busy on average, with at least one core near 100 % almost all the time; part of that is the CNN's threads spin-waiting (§8). The board was about equally busy in all four configs under the CNN tiers (within 2.3 percentage points), so they faced comparable load. C's `rnet` value is higher; its runs differ in several ways (board-default CPU frequency instead of a fixed 2.016 GHz, the setpoint sender running, and a sampler window of only ≈ 2 min including start-up, i.e. 14 samples instead of 182), and the cause was not studied.
 
 *Sources: `results/phase6b/realload.md` (load evidence table; "CPU busy per core", means over 2 repeats), `realload_long.csv`.*
 
@@ -134,7 +134,7 @@ Comparing Linux (30 min) with C (100 s): we also split every Linux run into 10,0
 
 ### 3.6 Predictions written before the runs
 
-We wrote 15 predictions down before any run and did not change them afterwards: R1–R6 (Nov 16, realistic load), F1–F4 (Nov 17, full chain), G1–G5 (Nov 18, combined load, written after repeat 1 of the single tiers). Section 5 states which held.
+We wrote 15 predictions down before the runs they predict and did not change them afterwards: R1–R6 (Nov 16, realistic load), F1–F4 (Nov 17, full chain), G1–G5 (Nov 18, combined load; written after repeat 1 of the single tiers, before any `rboth` run). Section 5 states which held.
 
 ---
 
@@ -164,7 +164,7 @@ We wrote 15 predictions down before any run and did not change them afterwards: 
 
 *Each point is the worst case of one 10,000-cycle block; dashed line = 1 ms deadline; horizontal markers = the same config under `stress-ng` (0 % and all-core). Source: `results/phase6b/block_wcl.png`.*
 
-How to read it: A's blocks sit at 4–15 ms whenever the CNN runs. B stays below 1 ms under the CNN alone but crosses it when network traffic is added. B-iso under `rboth` is above 1 ms in almost every block. Config C sits at 6–11 µs in every tier, two to three orders of magnitude lower.
+How to read it: A's blocks sit at 4–15 ms whenever the CNN runs. B stays below 1 ms under the CNN alone but crosses it when network traffic is added. B-iso under `rboth` is above 1 ms in every block (36 of 36). Config C sits at 6–11 µs in every tier, two to three orders of magnitude lower.
 
 ### 4.2 The full chain: does every command reach the drive?
 
@@ -238,8 +238,8 @@ B-iso does keep our programs off core 3: under the CNN alone the core is only �
 ### 6.1 In OS terms
 
 - **A (fair scheduling):** the loop competes with the CNN's threads for CPU time and waits several milliseconds for its turn. CPU-heavy work (`rdeploy`) hurts most.
-- **B (`SCHED_FIFO`):** preempts the CNN immediately (≈ 0.5 ms under `rdeploy`), but cannot preempt the kernel's interrupt handling and softirq work. Network traffic therefore pushes B above 1 ms; on a stock kernel these paths are not preemptible.
-- **B-iso:** moving our programs and the movable interrupts away left core 3 as the only core with spare time. Under `rdeploy` and `rboth` it received far more kernel work than in plain B (function-call interrupts 654 vs 60 per second under `rboth`). This is **consistent with** B-iso's high lateness; the counters are run averages and do not prove the cause of each late cycle. Under `rnet` alone, CPU 3 got *less* work in B-iso than in B, yet B-iso still missed 0.5 ms (R3), so another mechanism may contribute (for example shared cache or memory traffic). A kernel trace on core 3 would settle it (future work).
+- **B (`SCHED_FIFO`):** preempts the CNN immediately (≈ 0.5 ms under `rdeploy`), but cannot preempt interrupt handlers or the softirq work that runs when an interrupt ends. That is most likely why network traffic pushes B above 1 ms (we did not trace it).
+- **B-iso:** moving our programs and the movable interrupts away left core 3 as the only core with spare time. Under `rdeploy` and `rboth` it received far more kernel work than in plain B (function-call interrupts 654 vs 60 per second under `rboth`). This is **consistent with** B-iso's high lateness; the counters are run averages and do not prove the cause of each late cycle. Under `rnet` alone, CPU 3 got *less* work in B-iso than in B, yet B-iso still exceeded the predicted 0.5 ms (R3), so another mechanism may contribute (for example shared cache or memory traffic). A kernel trace on core 3 would settle it (future work).
 - **A busy core is not what delays a `SCHED_FIFO` thread (our interpretation).** Under `rboth` the whole board is equally busy in B and B-iso (≈ 71 %), and in B the loop shares cores that are 40–85 % busy with the CNN, yet B's worst case (1.45–1.54 ms) beats B-iso's (1.59–1.72 ms), whose core is only ≈ 24 % busy. A priority-90 thread takes the core from normal programs at once, so their CPU time costs it little; what it cannot take the core from is the kernel's interrupt and softirq work. For B-type setups, the amount of non-preemptible kernel work on the loop's core matters more than how busy that core looks.
 - **C:** the loop runs on a separate processor with its own RTOS; Linux can only delay the *setpoint*, never the tick. Its worst case grows by only a few µs under load (cause not studied), far below any deadline.
 - **R5:** the network burst does not slow the Linux setpoint sender, but the CNN's CPU load does (round trip up to 15.7 ms). The sender is a normal Linux process: it suffers from CPU contention, not from network interrupts.
@@ -263,6 +263,7 @@ The design lesson matches how industry builds such cells: let the Digital Twin h
 
 | Event | What happened | Effect on the data |
 | :--- | :--- | :--- |
+| `rnet` repeat 1 aborted (Nov 17) | The Linux runner was started twice by mistake; the second copy found the first one running, failed, and its clean-up switched off the first copy's network load mid-run. The run was stopped by hand | No result file was written; the attempt's files are archived with a README; repeat 1 re-run completely and passed every check |
 | `rnet` repeat 2 aborted (Nov 18, 03:48) | The PC ran low on memory and its tool environment stopped the traffic sender mid-run; the board's own load check detected the missing load and stopped the run as designed | Aborted files archived (not deleted, not in git) with a README; repeat 2 re-run completely and passed every check |
 | Brief board contact during a run (Nov 18, ≈ 13:06) | A harness command was run to read its help text; the harness had no help option and briefly queried the boards (≈ 15 s) | No effect visible: worst case in that window 0.49 ms vs the run's typical block 0.66 ms. The harness now has `--help` and rejects unknown modes before any board contact |
 | Unusual MCU clock check before one run | Pre-flight reading 9,983 instead of ≈ 7,970 cycles in 50 µs | The check had been interrupted by the loop; the run's own data shows the clock unchanged (0.64 ppm vs the referee) |

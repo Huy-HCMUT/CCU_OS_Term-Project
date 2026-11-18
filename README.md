@@ -5,7 +5,7 @@
 
 ## 🎯 Key Results
 
-**Question:** can a 10 ms control loop keep its deadline while the same board runs heavy Linux work? **Answer:** on Linux, no; on the board's real-time MCU (Config C), yes: its worst-case lateness is about 150× smaller than the best Linux setup (B) and about 1,000× smaller than default Linux (A).
+**Question:** can a 10 ms control loop keep its deadline while the same board runs heavy Linux work? **Answer:** on Linux, no; on the board's real-time MCU (Config C), yes: its worst-case lateness is about 140–200× smaller than the best Linux setup (B) and about 1,000× smaller than default Linux (A).
 
 ![Worst-case lateness per 10,000-cycle block under realistic load](results/phase6b/block_wcl.png)
 
