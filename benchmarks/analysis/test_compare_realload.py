@@ -260,3 +260,198 @@ def test_compare_realload_rboth_linux_and_act(tmp_path):
     assert "ingest 48000 / skips 1" in md_text
 
 
+def _write_full_counters(
+    path: Path,
+    *,
+    time_s: float,
+    irq9: list[int],
+    irq13: list[int],
+    ipi_resched: list[int],
+    ipi_call: list[int],
+    ipi_tbcast: list[int],
+    err_val: int,
+    timer: list[int],
+    net_rx: list[int],
+    sched: list[int],
+    rcu: list[int],
+) -> None:
+    text = "\n".join(
+        [
+            "#TIME",
+            f"{time_s:.6f}",
+            "#INTERRUPTS",
+            "           CPU0       CPU1       CPU2       CPU3",
+            f"  9:   {irq9[0]:8d}   {irq9[1]:8d}   {irq9[2]:8d}   {irq9[3]:8d}  GICv3 39 Level     arch_mem_timer",
+            f" 13:   {irq13[0]:8d}   {irq13[1]:8d}   {irq13[2]:8d}   {irq13[3]:8d}  GICv3 19 Level     arch_timer",
+            f"IPI0:  {ipi_resched[0]:8d}   {ipi_resched[1]:8d}   {ipi_resched[2]:8d}   {ipi_resched[3]:8d}  Rescheduling interrupts",
+            f"IPI1:  {ipi_call[0]:8d}   {ipi_call[1]:8d}   {ipi_call[2]:8d}   {ipi_call[3]:8d}  Function call interrupts",
+            f"IPI4:  {ipi_tbcast[0]:8d}   {ipi_tbcast[1]:8d}   {ipi_tbcast[2]:8d}   {ipi_tbcast[3]:8d}  Timer broadcast interrupts",
+            f"Err:   {err_val:8d}",
+            "#SOFTIRQS",
+            "                    CPU0       CPU1       CPU2       CPU3",
+            f"      TIMER:  {timer[0]:8d}   {timer[1]:8d}   {timer[2]:8d}   {timer[3]:8d}",
+            f"     NET_RX:  {net_rx[0]:8d}   {net_rx[1]:8d}   {net_rx[2]:8d}   {net_rx[3]:8d}",
+            f"      SCHED:  {sched[0]:8d}   {sched[1]:8d}   {sched[2]:8d}   {sched[3]:8d}",
+            f"        RCU:  {rcu[0]:8d}   {rcu[1]:8d}   {rcu[2]:8d}   {rcu[3]:8d}",
+            "#END",
+        ]
+    )
+    path.write_text(text + "\n", encoding="utf-8")
+
+
+def test_parse_counters_and_cpu_interference_per_cpu(tmp_path):
+    raw_dir = tmp_path / "raw"
+    real_r1 = raw_dir / "real_r1"
+    real_r1.mkdir(parents=True)
+
+    _write_linux_csv(real_r1 / "B_0_iso_rboth.csv", np.full(10000, 0.05, dtype=np.float64))
+    _write_full_counters(
+        real_r1 / "counters_B_0_iso_rboth_before.txt",
+        time_s=100.0,
+        irq9=[100, 100, 100, 100],
+        irq13=[1000, 1000, 1000, 1000],
+        ipi_resched=[50, 50, 50, 50],
+        ipi_call=[200, 200, 200, 200],
+        ipi_tbcast=[10, 10, 10, 10],
+        err_val=0,
+        timer=[10, 10, 10, 10],
+        net_rx=[20, 20, 20, 20],
+        sched=[30, 30, 30, 30],
+        rcu=[40, 40, 40, 40],
+    )
+    _write_full_counters(
+        real_r1 / "counters_B_0_iso_rboth_after.txt",
+        time_s=110.0,
+        irq9=[110, 120, 130, 140],
+        irq13=[1100, 1200, 1300, 1400],
+        ipi_resched=[55, 60, 65, 70],
+        ipi_call=[250, 260, 270, 6620],
+        ipi_tbcast=[11, 12, 13, 14],
+        err_val=7,
+        timer=[20, 30, 40, 1200],
+        net_rx=[22, 24, 26, 28],
+        sched=[50, 70, 90, 830],
+        rcu=[70, 100, 130, 940],
+    )
+
+    # An act_tuned_rnet run must not appear in cpu_interference
+    _write_c_csv(raw_dir / "act_tuned_rnet" / "C_0_act_tuned_rnet.csv")
+
+    ref_csv = tmp_path / "compare_long.csv"
+    pd.DataFrame(columns=["series", "tier", "rep", "file", "wcl_us"]).to_csv(ref_csv, index=False)
+
+    out_dir = tmp_path / "out"
+    df, md_text, chart = compare_realload.compare_realload(raw_dir, ref_csv, out_dir)
+
+    assert chart.exists()
+    assert (out_dir / "cpu3_kernel_work.png").exists()
+    assert (out_dir / "cpu_interference.csv").exists()
+
+    b_row = df[df["series"] == "B-iso"].iloc[0]
+    assert b_row["counter_span_s"] == pytest.approx(10.0)
+    assert b_row["dev_irq_per_cpu"] == "110,220,330,440"
+    assert b_row["ipi_resched_per_cpu"] == "5,10,15,20"
+    assert b_row["ipi_call_per_cpu"] == "50,60,70,6420"
+    assert b_row["ipi_tbcast_per_cpu"] == "1,2,3,4"
+    assert b_row["softirq_sched_per_cpu"] == "20,40,60,800"
+    assert b_row["softirq_sched_delta"] == 920
+    assert b_row["softirq_rcu_per_cpu"] == "30,60,90,900"
+    assert b_row["softirq_rcu_delta"] == 1080
+
+    cpu_df = pd.read_csv(out_dir / "cpu_interference.csv")
+    assert set(cpu_df["series"]) == {"B-iso"}
+    assert len(cpu_df) == 32  # 1 Linux run * 4 CPUs * 8 counters
+
+    cpu3 = cpu_df[cpu_df["cpu"] == 3].set_index("counter")
+    expected_cpu3_per_s = {
+        "dev_irq": 44.0,
+        "ipi_resched": 2.0,
+        "ipi_call": 642.0,
+        "ipi_tbcast": 0.4,
+        "softirq_timer": 119.0,
+        "softirq_net_rx": 0.8,
+        "softirq_sched": 80.0,
+        "softirq_rcu": 90.0,
+    }
+    for k, exp in expected_cpu3_per_s.items():
+        assert cpu3.loc[k, "per_s"] == pytest.approx(exp)
+
+    assert "## Kernel work on CPU 3" in md_text
+    assert "**Repeats of `rboth`:**" in md_text
+    assert "**B-iso isolation:**" in md_text
+
+
+def test_parse_counters_without_ipi_and_act_only_cpu_interference(tmp_path):
+    before = tmp_path / "before.txt"
+    after = tmp_path / "after.txt"
+    _write_counters(before, net_rx=[0, 0, 0, 0], wlan_rx=100, irq10=[1, 2, 3, 4], pswpin=0)
+    _write_counters(after, net_rx=[5, 5, 5, 5], wlan_rx=200, irq10=[11, 12, 13, 14], pswpin=0)
+
+    parsed = compare_realload._parse_counters(before, after)
+    assert parsed["ipi_resched_per_cpu"] == ""
+    assert parsed["ipi_call_per_cpu"] == ""
+    assert parsed["ipi_tbcast_per_cpu"] == ""
+    assert parsed["softirq_sched_per_cpu"] == ""
+    assert parsed["softirq_rcu_per_cpu"] == ""
+    assert parsed["dev_irq_per_cpu"] == "10,10,10,10"
+
+    raw_dir = tmp_path / "raw_act"
+    _write_c_csv(raw_dir / "act_tuned_rnet" / "C_0_act_tuned_rnet.csv")
+    ref_csv = tmp_path / "ref.csv"
+    pd.DataFrame(columns=["series", "tier", "rep", "file", "wcl_us"]).to_csv(ref_csv, index=False)
+    out_dir = tmp_path / "out_act"
+    df, _, _ = compare_realload.compare_realload(raw_dir, ref_csv, out_dir)
+    assert len(df) == 1
+    cpu_df = compare_realload.cpu_interference(df)
+    assert cpu_df.empty
+
+
+def test_load_evidence_table_pipe_count_matches_header(tmp_path):
+    raw_dir = tmp_path / "raw"
+    real_r1 = raw_dir / "real_r1"
+    real_r1.mkdir(parents=True)
+
+    _write_linux_csv(real_r1 / "B_0_iso_rnet.csv", np.full(10000, 0.05, dtype=np.float64))
+    (real_r1 / "env_B_0_iso_rnet.txt").write_text(
+        "# loadcheck start: LOADCHECK OK tier=rnet rx_Bps=6500000 inferences=-\n"
+        "# loadcheck mid: LOADCHECK OK tier=rnet rx_Bps=6600000 inferences=-\n"
+        "# irqs_moved=51 of 81\n"
+        "# wifi_irq 140 effective=0\n"
+        "# wifi_irq 141 effective=0\n",
+        encoding="utf-8",
+    )
+
+    ref_csv = tmp_path / "compare_long.csv"
+    pd.DataFrame(columns=["series", "tier", "rep", "file", "wcl_us"]).to_csv(ref_csv, index=False)
+
+    out_dir = tmp_path / "out"
+    df, md_text, _ = compare_realload.compare_realload(raw_dir, ref_csv, out_dir)
+
+    # Long CSV preserves internal " | " separator unchanged
+    row = df.iloc[0]
+    assert " | " in row["loadcheck"]
+    assert " | " in row["wifi_irq"]
+
+    # Extract Markdown table rows directly under "## Load Evidence Per Run"
+    lines = md_text.splitlines()
+    start_idx = lines.index("## Load Evidence Per Run") + 1
+    table_lines = []
+    for ln in lines[start_idx:]:
+        if not ln.strip():
+            if table_lines:
+                break
+            continue
+        if ln.startswith("|"):
+            table_lines.append(ln)
+
+    assert len(table_lines) == 3  # header + separator + 1 data row
+    def count_unescaped_pipes(s: str) -> int:
+        return sum(1 for i, ch in enumerate(s) if ch == "|" and (i == 0 or s[i - 1] != "\\"))
+
+    header_pipes = count_unescaped_pipes(table_lines[0])
+    for ln in table_lines[1:]:
+        assert count_unescaped_pipes(ln) == header_pipes
+
+
+
+

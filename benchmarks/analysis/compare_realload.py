@@ -32,7 +32,33 @@ REAL_LINUX_FILE_RE = re.compile(r"^(?P<config>[AB])_0(?P<iso>_iso)?_(?P<tier>rne
 REAL_C_DIR_RE = re.compile(r"^ipc_tuned_(?P<tier>rnet|rdeploy|rboth)(?:_r(?P<rep>\d+))?$")
 ACT_DIR_RE = re.compile(r"^act_tuned(?:_(?P<tier>rnet|rdeploy|rboth))?(?:_r(?P<rep>\d+))?$")
 
-SOFTIRQ_KEYS = ("NET_RX", "NET_TX", "BLOCK", "TIMER")
+SOFTIRQ_KEYS = ("NET_RX", "NET_TX", "BLOCK", "TIMER", "SCHED", "RCU")
+LINUX_SERIES = ("A", "B", "B-iso")
+CPU_INTERFERENCE_COUNTERS = (
+    "dev_irq",
+    "ipi_resched",
+    "ipi_call",
+    "ipi_tbcast",
+    "softirq_timer",
+    "softirq_net_rx",
+    "softirq_sched",
+    "softirq_rcu",
+)
+COUNTER_TO_COL = {
+    "dev_irq": "dev_irq_per_cpu",
+    "ipi_resched": "ipi_resched_per_cpu",
+    "ipi_call": "ipi_call_per_cpu",
+    "ipi_tbcast": "ipi_tbcast_per_cpu",
+    "softirq_timer": "softirq_timer_per_cpu",
+    "softirq_net_rx": "softirq_net_rx_per_cpu",
+    "softirq_sched": "softirq_sched_per_cpu",
+    "softirq_rcu": "softirq_rcu_per_cpu",
+}
+IPI_DESC_TO_COL = {
+    "Rescheduling interrupts": "ipi_resched_per_cpu",
+    "Function call interrupts": "ipi_call_per_cpu",
+    "Timer broadcast interrupts": "ipi_tbcast_per_cpu",
+}
 
 
 def _block_wcls(l_rel: np.ndarray, block_size: int = BLOCK_SIZE) -> np.ndarray:
@@ -110,11 +136,28 @@ def _parse_vmstat(lines: list[str]) -> dict[str, int]:
     return out
 
 
+def _parse_time_section(lines: list[str]) -> float | None:
+    for line in lines:
+        s = line.strip()
+        if not s:
+            continue
+        try:
+            return float(s)
+        except ValueError:
+            pass
+    return None
+
+
 def _parse_counters(before_path: Path, after_path: Path) -> dict:
     info = {
+        "counter_span_s": np.nan,
         "irq_total_per_cpu": "",
         "irq_total_delta": np.nan,
         "top5_irqs": "",
+        "dev_irq_per_cpu": "",
+        "ipi_resched_per_cpu": "",
+        "ipi_call_per_cpu": "",
+        "ipi_tbcast_per_cpu": "",
         "softirq_net_rx_delta": np.nan,
         "softirq_net_rx_per_cpu": "",
         "softirq_net_tx_delta": np.nan,
@@ -123,6 +166,10 @@ def _parse_counters(before_path: Path, after_path: Path) -> dict:
         "softirq_block_per_cpu": "",
         "softirq_timer_delta": np.nan,
         "softirq_timer_per_cpu": "",
+        "softirq_sched_delta": np.nan,
+        "softirq_sched_per_cpu": "",
+        "softirq_rcu_delta": np.nan,
+        "softirq_rcu_per_cpu": "",
         "wlan0_rx_bytes_delta": np.nan,
         "wlan0_rx_packets_delta": np.nan,
         "wlan0_tx_bytes_delta": np.nan,
@@ -137,22 +184,43 @@ def _parse_counters(before_path: Path, after_path: Path) -> dict:
     sb = _parse_sections(before_path)
     sa = _parse_sections(after_path)
 
+    tb = _parse_time_section(sb.get("TIME", []))
+    ta = _parse_time_section(sa.get("TIME", []))
+    if tb is not None and ta is not None:
+        info["counter_span_s"] = float(ta - tb)
+
     # Interrupts
     nb, irqs_b = _parse_per_cpu_table(sb.get("INTERRUPTS", []))
     na, irqs_a = _parse_per_cpu_table(sa.get("INTERRUPTS", []))
     n_cpus = min(nb, na)
     if n_cpus > 0:
         cpu_totals = [0] * n_cpus
+        dev_totals = [0] * n_cpus
+        has_dev = False
+        vb_by_desc = {
+            desc.strip(): vals for vals, desc in irqs_b.values() if desc.strip() in IPI_DESC_TO_COL
+        }
         per_line_deltas: list[tuple[int, str, str, list[int]]] = []
         for key, (va, desc) in irqs_a.items():
             vb = irqs_b.get(key, ([0] * n_cpus, ""))[0]
             deltas = [va[i] - vb[i] for i in range(n_cpus)]
             for i in range(n_cpus):
                 cpu_totals[i] += deltas[i]
+            if key.isdigit():
+                has_dev = True
+                for i in range(n_cpus):
+                    dev_totals[i] += deltas[i]
+            desc_clean = desc.strip()
+            if desc_clean in IPI_DESC_TO_COL:
+                vb_desc = vb_by_desc.get(desc_clean, [0] * n_cpus)
+                ipi_deltas = [va[i] - vb_desc[i] for i in range(n_cpus)]
+                info[IPI_DESC_TO_COL[desc_clean]] = ",".join(str(d) for d in ipi_deltas)
             per_line_deltas.append((sum(deltas), key, desc, deltas))
         per_line_deltas.sort(key=lambda item: item[0], reverse=True)
         info["irq_total_per_cpu"] = ",".join(str(x) for x in cpu_totals)
         info["irq_total_delta"] = int(sum(cpu_totals))
+        if has_dev:
+            info["dev_irq_per_cpu"] = ",".join(str(x) for x in dev_totals)
         top5_parts = []
         for tot, key, desc, deltas in per_line_deltas[:5]:
             label = f"{key}({desc})" if desc else key
@@ -471,7 +539,57 @@ def _load_reference_wcl(ref_csv: Path) -> dict[tuple[str, str], tuple[str, float
     return out
 
 
-def _build_markdown(long_df: pd.DataFrame, ref_map: dict[tuple[str, str], tuple[str, float]]) -> str:
+def cpu_interference(long_df: pd.DataFrame) -> pd.DataFrame:
+    """Return long-format per-CPU kernel work deltas and rates for Linux series runs."""
+    cols = ["file", "series", "tier", "rep", "cpu", "counter", "delta", "per_s"]
+    if long_df.empty:
+        return pd.DataFrame(columns=cols)
+
+    rows: list[dict] = []
+    for _, row in long_df.iterrows():
+        if row.get("series") not in LINUX_SERIES:
+            continue
+        span_raw = row.get("counter_span_s")
+        span = float(span_raw) if span_raw is not None and pd.notna(span_raw) and float(span_raw) > 0 else np.nan
+        for counter in CPU_INTERFERENCE_COUNTERS:
+            col = COUNTER_TO_COL[counter]
+            raw_val = row.get(col)
+            if raw_val is None or pd.isna(raw_val):
+                continue
+            s = str(raw_val).strip()
+            if not s:
+                continue
+            for cpu_idx, tok in enumerate(s.split(",")):
+                tok = tok.strip()
+                if not tok:
+                    continue
+                try:
+                    delta = int(tok)
+                except ValueError:
+                    continue
+                per_s = float(delta) / span if np.isfinite(span) else np.nan
+                rows.append(
+                    {
+                        "file": row["file"],
+                        "series": row["series"],
+                        "tier": row["tier"],
+                        "rep": int(row["rep"]),
+                        "cpu": int(cpu_idx),
+                        "counter": counter,
+                        "delta": delta,
+                        "per_s": per_s,
+                    }
+                )
+    return pd.DataFrame(rows, columns=cols)
+
+
+def _build_markdown(
+    long_df: pd.DataFrame,
+    ref_map: dict[tuple[str, str], tuple[str, float]],
+    cpu_df: pd.DataFrame | None = None,
+) -> str:
+    if cpu_df is None:
+        cpu_df = cpu_interference(long_df)
     lines = [
         "# Phase 6a Realistic-Load Comparison (R-net, R-deploy & R-both)",
         "",
@@ -530,12 +648,53 @@ def _build_markdown(long_df: pd.DataFrame, ref_map: dict[tuple[str, str], tuple[
             skips = int(r["pc_ingest_late_skips"]) if pd.notna(r.get("pc_ingest_late_skips")) else 0
             ingest_s = f"ingest {float(r['pc_ingest_rate_Bps']):.0f} / skips {skips}"
             pc_s = ingest_s if pc_s == "—" else f"{pc_s} + {ingest_s}"
-        lc_s = str(r["loadcheck"]) if str(r["loadcheck"]) else "—"
-        aff_parts = [p for p in (str(r["irqs_moved"]), str(r["wifi_irq"])) if p]
+        lc_s = str(r["loadcheck"]).replace(" | ", "; ") if str(r["loadcheck"]) else "—"
+        aff_parts = [p.replace(" | ", "; ") for p in (str(r["irqs_moved"]), str(r["wifi_irq"])) if p]
         aff_s = "; ".join(aff_parts) if aff_parts else "—"
         lines.append(
             f"| {r['file']} | {r['series']} | {r['tier']} | {int(r['rep'])} | {rx_b} | {net_rx} | {irq_tot} | {top1} | {tmax} | {fmin} | {throt} | {inf_s} | {pc_s} | {lc_s} | {aff_s} |"
         )
+
+    lines.extend(
+        [
+            "",
+            "## Kernel work on CPU 3",
+            "",
+            "| Series | Tier | n runs | dev_irq | ipi_resched | ipi_call | ipi_tbcast | softirq_timer | softirq_net_rx | softirq_sched | softirq_rcu |",
+            "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for series in LINUX_SERIES:
+        for tier in ("rnet", "rdeploy", "rboth"):
+            sub = long_df[(long_df["series"] == series) & (long_df["tier"] == tier)]
+            if sub.empty:
+                continue
+            cells: list[str] = []
+            for counter in CPU_INTERFERENCE_COUNTERS:
+                vals = (
+                    cpu_df[
+                        (cpu_df["series"] == series)
+                        & (cpu_df["tier"] == tier)
+                        & (cpu_df["cpu"] == 3)
+                        & (cpu_df["counter"] == counter)
+                    ]["per_s"]
+                    .dropna()
+                    .to_numpy(dtype=np.float64)
+                )
+                cells.append(_fmt_range(vals, 0) if vals.size else "—")
+            lines.append(f"| {series} | {tier} | {len(sub)} | " + " | ".join(cells) + " |")
+
+    lines.extend(
+        [
+            "",
+            "(1) B-iso pins the control thread to CPU 3 and moves our load, the sampler and the movable IRQs to CPUs 0–2; "
+            "A and B are not pinned, so for them CPU 3 is the same core for comparison only; "
+            "(2) isolation is by affinity only: no `isolcpus`, `nohz_full` or `rcu_nocbs` on the kernel command line "
+            "(checked 2026-11-18); "
+            "(3) the counters are whole-run before/after snapshots (incl. the 30 s warm-up), so the rates are run averages, "
+            "not what happened at the worst cycle.",
+        ]
+    )
 
     lines.extend(
         [
@@ -562,6 +721,11 @@ def _build_markdown(long_df: pd.DataFrame, ref_map: dict[tuple[str, str], tuple[
             "",
             "**R-both (DECISIONS.md D13):** `rnet` and `rdeploy` at the same time (production + burst), "
             "the realistic worst case.",
+            "",
+            "**Repeats of `rboth`:** both repeats ran on 2026-11-18, about 8 min apart (Linux) and 1.5 h apart (`act`); "
+            "they show within-session spread, not day-to-day variation.",
+            "",
+            "**B-iso isolation:** by affinity only (see Kernel work on CPU 3).",
             "",
         ]
     )
@@ -660,6 +824,108 @@ def _plot_block_wcl(records: list[dict], ref_map: dict[tuple[str, str], tuple[st
     return out_path
 
 
+def _plot_cpu3_kernel_work(cpu_df: pd.DataFrame, out_dir: Path) -> Path:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
+
+    plt.rcParams.update(
+        {
+            "figure.facecolor": "#ffffff",
+            "axes.facecolor": "#ffffff",
+            "savefig.facecolor": "#ffffff",
+            "font.size": 9,
+            "axes.grid": True,
+            "grid.color": "#e4e3df",
+            "grid.linewidth": 0.6,
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "legend.frameon": False,
+        }
+    )
+
+    chart_tiers = ("rnet", "rdeploy", "rboth")
+    chart_colors = {"A": "#2a78d6", "B": "#fb923c", "B-iso": "#4b5563"}
+    bar_width = 0.25
+    offsets = {"A": -bar_width, "B": 0.0, "B-iso": bar_width}
+
+    cpu3 = cpu_df[cpu_df["cpu"] == 3].copy() if not cpu_df.empty else pd.DataFrame(columns=cpu_df.columns)
+    softirq_sum_counters = ("softirq_timer", "softirq_net_rx", "softirq_sched", "softirq_rcu")
+
+    if not cpu3.empty:
+        ipi_df = cpu3[cpu3["counter"] == "ipi_call"][["file", "series", "tier", "per_s"]].dropna()
+        soft_sub = cpu3[cpu3["counter"].isin(softirq_sum_counters)].dropna(subset=["per_s"])
+        soft_df = (
+            soft_sub.groupby(["file", "series", "tier"], as_index=False)["per_s"].sum()
+            if not soft_sub.empty
+            else pd.DataFrame(columns=["file", "series", "tier", "per_s"])
+        )
+    else:
+        ipi_df = pd.DataFrame(columns=["file", "series", "tier", "per_s"])
+        soft_df = pd.DataFrame(columns=["file", "series", "tier", "per_s"])
+
+    panels = [
+        (ipi_df, "Function-call IPIs on CPU 3 (1/s)"),
+        (soft_df, "Softirqs on CPU 3 (1/s)"),
+    ]
+
+    fig, axes = plt.subplots(1, 2, figsize=(9.0, 4.0))
+    xs = np.arange(len(chart_tiers), dtype=float)
+    seen_series: set[str] = set()
+
+    for ax, (panel_df, ylabel) in zip(axes, panels):
+        for series in LINUX_SERIES:
+            color = chart_colors[series]
+            for tier_idx, tier in enumerate(chart_tiers):
+                vals = (
+                    panel_df[(panel_df["series"] == series) & (panel_df["tier"] == tier)]["per_s"]
+                    .dropna()
+                    .to_numpy(dtype=np.float64)
+                )
+                if vals.size == 0:
+                    continue
+                mean_v = float(np.mean(vals))
+                low_err = mean_v - float(np.min(vals))
+                high_err = float(np.max(vals)) - mean_v
+                seen_series.add(series)
+                ax.bar(
+                    xs[tier_idx] + offsets[series],
+                    mean_v,
+                    width=bar_width,
+                    color=color,
+                    zorder=3,
+                )
+                ax.errorbar(
+                    [xs[tier_idx] + offsets[series]],
+                    [mean_v],
+                    yerr=[[low_err], [high_err]],
+                    fmt="none",
+                    ecolor="#1f2937",
+                    elinewidth=1.0,
+                    capsize=3,
+                    zorder=4,
+                )
+        ax.set_xticks(xs, list(chart_tiers))
+        ax.set_xlabel("Load tier")
+        ax.set_ylabel(ylabel)
+        ax.set_ylim(bottom=0)
+
+    axes[0].set_title("Function-call IPIs on CPU 3", fontsize=10)
+    axes[1].set_title("Timer + NET_RX + SCHED + RCU softirqs on CPU 3", fontsize=10)
+    if seen_series:
+        handles = [Patch(facecolor=chart_colors[s], label=s) for s in LINUX_SERIES if s in seen_series]
+        fig.legend(handles=handles, loc="lower center", ncol=len(handles), fontsize=9)
+        fig.tight_layout(rect=[0.0, 0.08, 1.0, 1.0])
+    else:
+        fig.tight_layout()
+
+    out_path = out_dir / "cpu3_kernel_work.png"
+    fig.savefig(out_path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
 def compare_realload(raw_dir: Path, ref_csv: Path, out_dir: Path) -> tuple[pd.DataFrame, str, Path]:
     records = _collect_realload_runs(raw_dir)
     ref_map = _load_reference_wcl(ref_csv)
@@ -681,9 +947,14 @@ def compare_realload(raw_dir: Path, ref_csv: Path, out_dir: Path) -> tuple[pd.Da
         "n_blocks",
         "block_wcl_median_us",
         "block_wcl_max_us",
+        "counter_span_s",
         "irq_total_per_cpu",
         "irq_total_delta",
         "top5_irqs",
+        "dev_irq_per_cpu",
+        "ipi_resched_per_cpu",
+        "ipi_call_per_cpu",
+        "ipi_tbcast_per_cpu",
         "softirq_net_rx_delta",
         "softirq_net_rx_per_cpu",
         "softirq_net_tx_delta",
@@ -692,6 +963,10 @@ def compare_realload(raw_dir: Path, ref_csv: Path, out_dir: Path) -> tuple[pd.Da
         "softirq_block_per_cpu",
         "softirq_timer_delta",
         "softirq_timer_per_cpu",
+        "softirq_sched_delta",
+        "softirq_sched_per_cpu",
+        "softirq_rcu_delta",
+        "softirq_rcu_per_cpu",
         "wlan0_rx_bytes_delta",
         "wlan0_rx_packets_delta",
         "wlan0_tx_bytes_delta",
@@ -721,14 +996,21 @@ def compare_realload(raw_dir: Path, ref_csv: Path, out_dir: Path) -> tuple[pd.Da
     long_csv = out_dir / "realload_long.csv"
     long_df.to_csv(long_csv, index=False, float_format="%.4f")
 
-    md_text = _build_markdown(long_df, ref_map)
+    cpu_df = cpu_interference(long_df)
+    cpu_csv = out_dir / "cpu_interference.csv"
+    cpu_df.to_csv(cpu_csv, index=False, float_format="%.4f")
+
+    md_text = _build_markdown(long_df, ref_map, cpu_df)
     md_path = out_dir / "realload.md"
     md_path.write_text(md_text, encoding="utf-8")
 
     chart_path = _plot_block_wcl(records, ref_map, out_dir)
+    cpu3_chart_path = _plot_cpu3_kernel_work(cpu_df, out_dir)
     print(f"Wrote {long_csv}")
+    print(f"Wrote {cpu_csv}")
     print(f"Wrote {md_path}")
     print(f"Wrote {chart_path}")
+    print(f"Wrote {cpu3_chart_path}")
     return long_df, md_text, chart_path
 
 
