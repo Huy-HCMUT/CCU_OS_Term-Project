@@ -1,0 +1,12 @@
+{
+  "mode": "ingest",
+  "host": "192.168.50.70",
+  "port": 5555,
+  "start_iso": "2026-11-18T18:00:40+08:00",
+  "last_iso": "2026-11-18T18:03:00+08:00",
+  "elapsed_s": 140.14,
+  "bytes_sent": 6696000,
+  "avg_rate_Bps": 47780.7,
+  "reconnects": 0,
+  "late_skips": 1
+}

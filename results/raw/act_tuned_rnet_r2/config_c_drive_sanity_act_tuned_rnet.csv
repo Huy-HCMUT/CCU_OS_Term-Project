@@ -1,0 +1,2 @@
+# ticks=20 tick_min_cyc=1600229 tick_max_cyc=1600613 periods=4142 period_outliers=0 level_errors=0 initial_high_cyc=256045 events=0 events_dropped=0
+event,tick_idx,tick_cyc,rise_cyc,fall_cyc,high_cyc,period_cyc

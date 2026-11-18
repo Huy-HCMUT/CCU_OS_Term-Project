@@ -1,0 +1,3 @@
+# Linux-side load samples on the DUT for tag sanity_act_tuned_rboth (stress 0%). busy = 1 - d(idle+iowait)/d(total) over 1 s from /proc/stat.
+sample=start time=2026-11-18T19:36:15 stress_ng_procs=0 busy_cpu=2.2 busy_cpu0=4.0 busy_cpu1=1.0 busy_cpu2=1.0 busy_cpu3=3.0 loadavg=0.00/0.19/0.58 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=1420800,1420800,1420800,2016000 temp_max_c=37.4
+sample=mid time=2026-11-18T19:36:19 stress_ng_procs=0 busy_cpu=2.5 busy_cpu0=2.0 busy_cpu1=1.0 busy_cpu2=3.0 busy_cpu3=3.0 loadavg=0.00/0.18/0.57 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=1305600,1305600,1305600,1305600 temp_max_c=37.4

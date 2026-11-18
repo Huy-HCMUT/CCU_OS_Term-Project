@@ -1,0 +1,4 @@
+# Linux-side load samples on the DUT for tag 0_act_tuned_rboth (stress 0%). busy = 1 - d(idle+iowait)/d(total) over 1 s from /proc/stat.
+sample=start time=2026-11-18T18:01:16 stress_ng_procs=0 busy_cpu=71.8 busy_cpu0=45.4 busy_cpu1=100.0 busy_cpu2=39.4 busy_cpu3=100.0 loadavg=1.48/0.66/1.41 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=2016000,2016000,2016000,2016000 temp_max_c=54.4
+sample=mid time=2026-11-18T18:02:11 stress_ng_procs=0 busy_cpu=72.1 busy_cpu0=39.6 busy_cpu1=100.0 busy_cpu2=49.0 busy_cpu3=100.0 loadavg=2.38/1.05/1.50 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=2016000,2016000,2016000,2016000 temp_max_c=57.5
+# loadcheck mid: LOADCHECK OK tier=rboth rx_Bps=6624579 inferences=60

@@ -1,0 +1,4 @@
+# Linux-side load samples on the DUT for tag 0_act_tuned_rnet (stress 0%). busy = 1 - d(idle+iowait)/d(total) over 1 s from /proc/stat.
+sample=start time=2026-11-18T00:45:39 stress_ng_procs=0 busy_cpu=13.9 busy_cpu0=12.0 busy_cpu1=14.3 busy_cpu2=16.2 busy_cpu3=12.2 loadavg=0.40/0.48/0.73 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=2016000,2016000,1420800,1420800 temp_max_c=39.3
+sample=mid time=2026-11-18T00:46:33 stress_ng_procs=0 busy_cpu=12.3 busy_cpu0=29.7 busy_cpu1=7.1 busy_cpu2=6.9 busy_cpu3=7.0 loadavg=0.32/0.45/0.71 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=1420800,1420800,1420800,2016000 temp_max_c=40.2
+# loadcheck mid: LOADCHECK OK tier=rnet rx_Bps=6661915 inferences=-
