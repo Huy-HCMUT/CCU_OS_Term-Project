@@ -36,12 +36,11 @@ CCU_OS_Term Project/
 ├── .gitignore                     # Git ignore configuration
 ├── docs/                          # Project proposals, notes, and specifications
 ├── data/                          # Datasets and ingestion scripts
-├── mpu_linux/                     # Linux-side software and telemetry tools
-├── mcu_zephyr/                    # MCU firmware and Zephyr RTOS source
-├── ipc/                           # Inter-Processor Communication (IPC) modules
-├── benchmarks/                    # Test scripts and benchmarking harness
+├── mpu_linux/                     # Linux-side benchmark (Configs A/B)
+├── benchmarks/                    # Board apps (MCU sketches + IPC), harnesses, analysis
 ├── results/                       # Experimental results, logs, and plots
-└── paper_ieee/                    # IEEEtran report sources and presentation slides
+├── paper_ieee/                    # IEEEtran report sources and presentation slides
+└── unused/                        # Files no longer used (see unused/README.md)
 ```
 
 ---
