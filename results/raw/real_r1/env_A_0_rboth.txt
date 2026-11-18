@@ -1,0 +1,5 @@
+# loadcheck start: LOADCHECK OK tier=rboth rx_Bps=6707448 inferences=60
+sample=start time=2026-11-18T06:32:20 stress_ng_procs=0 busy_cpu=72.9 busy_cpu0=38.1 busy_cpu1=81.6 busy_cpu2=99.0 busy_cpu3=74.0 loadavg=2.23/1.20/0.58 governor=performance,performance,performance,performance cur_freq_khz=2016000,2016000,2016000,2016000 temp_max_c=57.2
+sample=mid time=2026-11-18T06:47:21 stress_ng_procs=0 busy_cpu=72.7 busy_cpu0=33.0 busy_cpu1=100.0 busy_cpu2=55.0 busy_cpu3=100.0 loadavg=3.32/3.10/2.24 governor=performance,performance,performance,performance cur_freq_khz=2016000,2016000,2016000,2016000 temp_max_c=62.3
+# loadcheck mid: LOADCHECK OK tier=rboth rx_Bps=6635251 inferences=60
+# loadcheck end: LOADCHECK OK tier=rboth rx_Bps=6643947 inferences=60
