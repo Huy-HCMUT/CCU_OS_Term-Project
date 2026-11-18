@@ -777,8 +777,10 @@ def _build_markdown(
             "(3) B-iso pins the control thread to core 3 and moves our load, the sampler and the movable IRQs to cores 0–2; "
             "for A, B and C nothing is pinned, so 'core 3' is only a label there.",
             "",
-            "(4) Config C (`C act tuned`) runs are ≈ 2 min long, so their means come from ≈ 14 samples against ≈ 180 for "
-            "the 30-min Linux runs; on Config C the Linux side also runs the analytics app that sends the setpoints.",
+            "(4) Config C (`C act tuned`) runs are ≈ 2 min long including start-up, so their means come from ≈ 14 samples "
+            "against ≈ 180 for the 30-min Linux runs. Config C runs also use the board's default CPU frequency setting "
+            "(Linux runs: fixed 2.016 GHz) and run the setpoint sender, so their busy % is not directly comparable; "
+            "the cause of differences was not studied.",
         ]
     )
 
