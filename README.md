@@ -113,7 +113,7 @@ bash benchmarks/run_benchmark.sh [CYCLES]           # Phase 2: A/B under stress-
 bash benchmarks/run_benchmark_6r.sh <rep> <rnet|rdeploy|rboth> <pc_ip>   # Phase 6a: A, B, B-iso under realistic load
 
 # On the PC (boards on adb)
-python benchmarks/run_config_c_hardware_test.py <mode> [--rep N] [--dut-ip IP --pc-ip IP]
+python benchmarks/run_config_c_hardware_test.py <mode> [--rep N] [--dut-ip IP --pc-ip IP]   # -h: help, no board contact
 #   mode = sanity | 0 | 50 | 100 | all (baseline), or <variant>-<sub> with variant ipc / ipct / b2 / b2t / act
 #   and sub = sanity | 0 | 50 | 100 | all | allcore | rnet | rdeploy | rboth (e.g. act-rnet)
 python benchmarks/realload/pc_traffic.py <bulk|ingest> --host <dut_ip> --duration <s> --out <file>

@@ -879,6 +879,54 @@ def _validate_ipv4(val, opt_name):
     return val
 
 
+BASE_MODES = ("sanity", "0", "baseline", "50", "100", "stress", "all")
+VARIANT_SUBMODES = ("sanity", "0", "50", "100", "all", "allcore") + REALLOAD_LOADS
+
+USAGE = """Usage: python benchmarks/run_config_c_hardware_test.py [MODE] [COUNT] [--rep N] [--dut-ip IP --pc-ip IP]
+
+Runs Config C on the real boards (DUT, referee, drive board) over adb.
+Every mode except -h/--help contacts the boards and may start load generators.
+
+MODE (default: sanity)
+  Stock baseline: sanity | 0 | baseline | 50 | 100 | stress | all
+  Variants:       <variant>-<sub>
+    variant = b2 | ipc | b2t | ipct | act
+    sub     = sanity | 0 | 50 | 100 | all | allcore | rnet | rdeploy | rboth
+    (rnet / rdeploy / rboth need --dut-ip and --pc-ip)
+COUNT       cycles per run (default 10000; sanity always uses 20)
+
+Options
+  --rep N         repeat number for variant modes (N >= 2 writes to <folder>_r<N>)
+  --dut-ip IP     DUT Wi-Fi address (realistic-load modes)
+  --pc-ip IP      this PC's address on the same network (realistic-load modes)
+  -h, --help      show this text and exit without contacting any board
+"""
+
+
+def _usage_error(msg):
+    """Print an argument error plus the usage text and exit (code 2) before any board contact."""
+    print(f"ERROR: {msg}")
+    print(USAGE)
+    sys.exit(2)
+
+
+def _check_mode(mode, rep_given):
+    """Validate MODE before any board contact. Returns (variant, submode); exits 1 on an unknown mode."""
+    prefix, _, submode = mode.partition("-")
+    variant = prefix if prefix in VARIANTS else None
+    if variant is None:
+        if mode not in BASE_MODES:
+            print(f"ERROR: unknown mode '{mode}' (see --help); no board was contacted")
+            sys.exit(1)
+        if rep_given:
+            print("ERROR: --rep needs a b2/ipc/b2t/ipct/act mode")
+            sys.exit(1)
+    elif submode not in VARIANT_SUBMODES:
+        print(f"ERROR: unknown mode '{mode}' for variant '{variant}' (see --help); no board was contacted")
+        sys.exit(1)
+    return variant, submode
+
+
 def _parse_cli_args(argv):
     pos = []
     rep = 1
@@ -888,7 +936,10 @@ def _parse_cli_args(argv):
     i = 0
     while i < len(argv):
         arg = argv[i]
-        if arg == "--rep":
+        if arg in ("-h", "--help"):
+            print(USAGE)
+            sys.exit(0)
+        elif arg == "--rep":
             if i + 1 >= len(argv):
                 print("ERROR: --rep requires an integer >= 1")
                 sys.exit(1)
@@ -932,22 +983,28 @@ def _parse_cli_args(argv):
         elif arg.startswith("--pc-ip="):
             pc_ip = _validate_ipv4(arg.split("=", 1)[1], "--pc-ip")
             i += 1
+        elif arg.startswith("-") and not arg.lstrip("-").isdigit():
+            _usage_error(f"unknown option '{arg}'")
         else:
             pos.append(arg)
             i += 1
+    if len(pos) > 2:
+        _usage_error(f"too many arguments: {' '.join(pos)}")
     mode = pos[0].lower() if len(pos) > 0 else "sanity"
-    count = int(pos[1]) if len(pos) > 1 else 10000
+    count = 10000
+    if len(pos) > 1:
+        try:
+            count = int(pos[1])
+        except ValueError:
+            _usage_error(f"COUNT must be an integer, got '{pos[1]}'")
+        if count < 1:
+            _usage_error(f"COUNT must be >= 1, got {count}")
     return mode, count, rep, rep_given, dut_ip, pc_ip
 
 
 if __name__ == "__main__":
     mode, count, rep, rep_given, dut_ip, pc_ip = _parse_cli_args(sys.argv[1:])
-    prefix, _, submode = mode.partition("-")
-    variant = prefix if prefix in VARIANTS else None
-
-    if rep_given and variant is None:
-        print("ERROR: --rep needs a b2/ipc/b2t/ipct/act mode")
-        sys.exit(1)
+    variant, submode = _check_mode(mode, rep_given)
 
     if variant is not None:
         sfx = VARIANTS[variant]["tag_suffix"]

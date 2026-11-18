@@ -817,3 +817,62 @@ def test_stop_realload_terminates_all(monkeypatch):
     assert mod._REALLOAD["procs"] == []
     assert any("realload.sh stop" in cmd for _, cmd in sent)
 
+
+
+# --- CLI safety: help and unknown modes never reach a board (2026-11-18) ---
+
+@pytest.fixture
+def cli_mod(monkeypatch):
+    mod = load_harness()
+
+    def no_board(*args, **kwargs):
+        raise AssertionError("a board was contacted during CLI parsing")
+
+    monkeypatch.setattr(mod, "run_adb", no_board)
+    monkeypatch.setattr(mod.subprocess, "run", no_board)
+    monkeypatch.setattr(mod.subprocess, "Popen", no_board)
+    return mod
+
+
+@pytest.mark.parametrize("flag", ["-h", "--help"])
+def test_cli_help_exits_without_board(cli_mod, capsys, flag):
+    with pytest.raises(SystemExit) as exc:
+        cli_mod._parse_cli_args(["act-rnet", flag])
+    assert exc.value.code == 0
+    assert "Usage:" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("argv", [["act-0", "--foo"], ["0", "abc"], ["0", "-5"], ["0", "10", "extra"]])
+def test_cli_bad_arguments_rejected(cli_mod, capsys, argv):
+    with pytest.raises(SystemExit) as exc:
+        cli_mod._parse_cli_args(argv)
+    assert exc.value.code == 2
+    assert "ERROR:" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("mode", ["bogus", "act-bogus", "ipct-", "help"])
+def test_unknown_mode_rejected_before_preflight(cli_mod, capsys, mode):
+    with pytest.raises(SystemExit) as exc:
+        cli_mod._check_mode(mode, rep_given=False)
+    assert exc.value.code == 1
+    assert "no board was contacted" in capsys.readouterr().out
+
+
+def test_rep_needs_variant(cli_mod):
+    with pytest.raises(SystemExit) as exc:
+        cli_mod._check_mode("0", rep_given=True)
+    assert exc.value.code == 1
+
+
+@pytest.mark.parametrize(
+    "mode,expected",
+    [("sanity", (None, "")), ("all", (None, "")), ("stress", (None, "")), ("act-rboth", ("act", "rboth")),
+     ("ipct-allcore", ("ipct", "allcore")), ("b2-0", ("b2", "0"))],
+)
+def test_known_modes_accepted(cli_mod, mode, expected):
+    assert cli_mod._check_mode(mode, rep_given=False) == expected
+
+
+def test_cli_valid_args_parse(cli_mod):
+    assert cli_mod._parse_cli_args(["ACT-rnet", "500", "--rep", "2", "--dut-ip", "10.0.0.2", "--pc-ip=10.0.0.3"]) == (
+        "act-rnet", 500, 2, True, "10.0.0.2", "10.0.0.3")
