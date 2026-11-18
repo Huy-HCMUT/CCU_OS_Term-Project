@@ -3,6 +3,29 @@
 
 ---
 
+## 🎯 Key Results
+
+**Question:** can a 10 ms control loop keep its deadline while the same board runs heavy Linux work? **Answer:** on Linux, no; on the board's real-time MCU (Config C), yes: its worst-case lateness is about 150× smaller than the best Linux setup (B) and about 1,000× smaller than default Linux (A).
+
+![Worst-case lateness per 10,000-cycle block under realistic load](results/phase6b/block_wcl.png)
+
+Under the heaviest realistic load (`rboth`: bulk network traffic and a containerised CNN at the same time; 2 repeats each):
+
+| Where the 10 ms loop runs | Worst-case lateness | Cycles later than the 1 ms deadline |
+| :--- | ---: | ---: |
+| A: Linux, default scheduler | 8.4–10.7 ms | 2.4–4.7 % |
+| B: Linux, `SCHED_FIFO` 90 + `mlockall` | 1.45–1.54 ms | 0.014–0.036 % |
+| B-iso: B on a reserved core | 1.59–1.72 ms | 0.16–0.31 % |
+| **C: MCU loop, setpoints from Linux** | **0.0076–0.0105 ms** | **0** |
+
+- **Full chain:** all 1,920 speed commands of the 8 Config C runs reached the emulated motor drive, none lost or wrong; the drive saw each new command 1.47–4.11 ms after the tick (mostly the 500 Hz PWM itself).
+- **Synthetic reference (`stress-ng` on all cores):** A 18.0–27.9 ms, Config C tuned IPC 0.0078 ms.
+- Lateness is measured relative to each run's best cycle. Limits: stock Linux kernel (not `PREEMPT_RT`), one board, emulated drive instead of a motor.
+
+Full tables: `results/phase6b/realload.md`, `results/phase6b/drive.md`, `results/phase5d/compare_configs.md`.
+
+---
+
 ## 👥 Team Information
 
 - **Course:** Operating System (Fall 2026)
@@ -50,6 +73,20 @@ Every configuration runs the **same minimal 10 ms control tick**; the analytics 
 
 ---
 
+## 🧭 Key Design Decisions
+
+Choices a reader might question, and why we made them:
+
+1. **Same 10 ms tick everywhere, analytics kept separate.** Every config runs the same minimal control tick; the FFT analytics run in another thread or on the other processor. So differences come from the OS, not from different work.
+2. **"Latest value wins" between Linux and the MCU.** Linux sends `(sequence, setpoint)`; an MCU handler only stores it in one 32-bit word, and the loop reads that word once per tick. The loop never waits for Linux, so a late message delays the *advice*, never the tick.
+3. **An external referee board.** A second UNO Q timestamps the DUT's tick pulse with its own DWT cycle counter, so Config C is not judged only by its own clock. The first referee used Zephyr's `k_cycle_get_32()`, which loses cycles while the MCU sleeps; it was replaced and the baseline re-run.
+4. **Stock and tuned MCU priorities, both reported.** Stock = library defaults (RouterBridge's `bridge` thread above the loop); tuned = the loop at priority 4, above it. Tuned removes most of the IPC cost.
+5. **One lateness definition for all configs.** Lateness relative to each run's best cycle (`L_rel`); for Config C the constant clock offset is removed by fitting the period. Absolute Linux values are kept in the long CSV files.
+6. **B-iso is isolation by affinity only.** Control thread on core 3, everything we start and the movable interrupts on cores 0–2, C-states off, but no `isolcpus` / `nohz_full` at boot. Under combined load the kernel's own work still reaches core 3 (see "Kernel work on CPU 3" in `results/phase6b/realload.md`).
+7. **Realistic load is the main result, `stress-ng` the controlled reference.** The realistic tiers model a deployed edge controller: network traffic over Wi-Fi and a containerised 1D-CNN. The CNN has random weights on purpose: it is background load, not a fault classifier.
+8. **An emulated drive instead of a motor.** A third UNO Q receives the speed command as 500 Hz PWM and records when each new command arrives. Part of the measured delay (waiting for the next PWM period) is fixed by the PWM itself, not by the OS.
+9. **Repeats.** `stress-ng` tiers: 3 runs per Linux condition, 3–4 per Config C condition (1–2 for all-core). Realistic tiers: 2 runs each; the two `rboth` repeats ran in one session, so they show within-session spread only.
+
 ## 🔌 Hardware Setup
 
 - **DUT:** Arduino UNO Q (Linux MPU: Qualcomm QRB2210, quad Cortex-A53, Debian 13, stock kernel 6.16 `PREEMPT`, **not** `PREEMPT_RT`; MCU: STM32U585 Cortex-M33 @ 160 MHz).
@@ -89,7 +126,7 @@ Every configuration runs the **same minimal 10 ms control tick**; the analytics 
 | Phase | What it tests | Run with | Raw data in `results/raw/` | Analysis (`benchmarks/analysis/` unless noted) | Results |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 2 | A and B under `stress-ng` 0 / 50 / 100 % | `benchmarks/run_benchmark.sh` | `A_*.csv`, `B_*.csv` | `analyze_latency.py` | `results/summary.md`, `results/plots/lateness_*.png` |
-| 2 (Tests 1–5) | I/O contention, 10,000-cycle endurance, core affinity, `mlockall`, FIFO vs RR | `benchmarks/run_advanced_experiments.sh` | `test1_*.csv` … `test5_*.csv` | `results/parse_advanced_metrics.py`, `results/plot_advanced_results.py` | `results/plots/test*.png` |
+| 2 (Tests 1–5) | I/O contention, 10,000-cycle endurance, core affinity, `mlockall`, FIFO vs RR | `benchmarks/run_advanced_experiments.sh` | `test1_*.csv` … `test5_*.csv` | `parse_advanced_metrics.py`, `plot_advanced_results.py` | `results/plots/test*.png` |
 | 4.5 | Config C baseline: MCU loop under Linux stress, no IPC (first referee) | harness modes `sanity`, `0`, `50`, `100` | `C_*.csv`, `config_c_dwt_*.csv`, `config_c_referee_*.csv` | `analyze_latency.py`, `analyze_referee.py` | `results/summary.md` (C rows), `results/referee_p45.md` |
 | Clock check | Why the MCU's Zephyr clock drifts against its DWT counter | `benchmarks/diagnostics/run_clock_check.py` | `clock_diagnostics_2026-10-19.csv` | same script | `results/clock_diagnostics_summary.md` |
 | 5 | Config C with IPC (Linux setpoints over RouterBridge); baseline re-run with the DWT referee | harness `b2-*`, `ipc-*` | `baseline_dwtref/`, `ipc/` | `analyze_latency.py`, `analyze_referee.py`, `analyze_ipc.py`, `pulse_pattern.py`, `compare_baseline_ipc.py` | `results/baseline_dwtref/`, `results/ipc/` (`compare_baseline_vs_ipc.md`) |

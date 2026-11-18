@@ -9,8 +9,8 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 
-RAW_DIR = Path(__file__).resolve().parent / "raw"
-PLOTS_DIR = Path(__file__).resolve().parent / "plots"
+RAW_DIR = Path(__file__).resolve().parents[2] / "results" / "raw"
+PLOTS_DIR = Path(__file__).resolve().parents[2] / "results" / "plots"
 PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Set clean aesthetic styling

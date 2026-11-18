@@ -21,6 +21,6 @@ Nothing in `results/raw/` was moved (raw data stays where it is). Files that loo
 - `benchmarks/pin_test/`: used by the harness (`b2-` runs) and the clock diagnostics.
 - `benchmarks/config_c_demo/`: the M3 live-demo app (not for measurements).
 - `benchmarks/config_c_ipc/`, `config_c_ipc_tuned/`, `config_c_base_tuned/`, `config_c_sender_sketch.ino`: produced results that are still reported.
-- `benchmarks/run_benchmark.sh`, `run_advanced_experiments.sh`, `results/parse_advanced_metrics.py`, `results/plot_advanced_results.py`: Phase 2 and Tests 1-5, still cited (e.g. Test 3 for affinity).
+- `benchmarks/run_benchmark.sh`, `run_advanced_experiments.sh`, `benchmarks/analysis/parse_advanced_metrics.py`, `plot_advanced_results.py` (moved there from `results/` on 2026-11-18): Phase 2 and Tests 1-5, still cited (e.g. Test 3 for affinity).
 - `benchmarks/analysis/compare_baseline_ipc.py`: produced `results/ipc/compare_baseline_vs_ipc.md`.
 - `docs/` reports and PDFs: submitted deliverables.

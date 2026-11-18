@@ -25,7 +25,7 @@ python benchmarks/analysis/compare_realload.py --raw results/raw --ref results/p
 python benchmarks/analysis/analyze_drive.py --raw results/raw --out results/phase6b
 ```
 
-Tests 1–5 (Phase 2) use `results/parse_advanced_metrics.py` and `results/plot_advanced_results.py`.
+Tests 1–5 (Phase 2): `parse_advanced_metrics.py` prints the tables, `plot_advanced_results.py` writes `results/plots/test*.png` (both read `results/raw/test*_*.csv`; moved here from `results/` on 2026-11-18).
 
 ## `analyze_latency.py` in detail
 

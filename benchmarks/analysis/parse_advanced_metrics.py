@@ -21,7 +21,7 @@ import numpy as np
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
 
-RESULTS_DIR = Path(__file__).resolve().parent / "raw"
+RESULTS_DIR = Path(__file__).resolve().parents[2] / "results" / "raw"
 
 def analyze_csv(csv_path: Path):
     if not csv_path.exists():
