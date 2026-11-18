@@ -65,6 +65,31 @@
 
 (1) B-iso pins the control thread to CPU 3 and moves our load, the sampler and the movable IRQs to CPUs 0–2; A and B are not pinned, so for them CPU 3 is the same core for comparison only; (2) isolation is by affinity only: no `isolcpus`, `nohz_full` or `rcu_nocbs` on the kernel command line (checked 2026-11-18); (3) the counters are whole-run before/after snapshots (incl. the 30 s warm-up), so the rates are run averages, not what happened at the worst cycle.
 
+## CPU busy per core
+
+| Series | Tier | n runs | Samples per run | Core 0 % | Core 1 % | Core 2 % | Core 3 % | Whole board % | Core 3 highest 10-s % |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A | rnet | 2 | 182–182 | 7.3 [7.3–7.3] | 9.8 [9.6–10.1] | 4.5 [4.3–4.7] | 3.1 [3.0–3.2] | 6.2 [6.2–6.2] | 20.8 |
+| A | rdeploy | 2 | 182–182 | 45.0 [35.4–54.5] | 61.4 [42.2–80.6] | 70.8 [45.9–95.6] | 79.3 [71.2–87.3] | 64.1 [63.1–65.1] | 100.0 |
+| A | rboth | 2 | 182–182 | 41.6 [40.9–42.4] | 85.6 [75.5–95.6] | 79.6 [74.8–84.3] | 78.5 [69.6–87.4] | 71.3 [70.0–72.6] | 100.0 |
+| B | rnet | 2 | 182–182 | 9.1 [8.7–9.4] | 9.9 [9.5–10.4] | 4.3 [3.0–5.6] | 2.9 [2.3–3.6] | 6.6 [6.4–6.7] | 31.9 |
+| B | rdeploy | 2 | 182–182 | 37.9 [32.1–43.8] | 55.0 [25.8–84.2] | 98.5 [97.0–99.9] | 63.6 [30.1–97.2] | 63.7 [63.7–63.8] | 100.0 |
+| B | rboth | 2 | 182–182 | 40.0 [39.7–40.2] | 82.9 [74.5–91.3] | 77.8 [74.3–81.4] | 84.8 [84.7–84.9] | 71.4 [70.1–72.6] | 100.0 |
+| B-iso | rnet | 2 | 182–182 | 8.7 [8.6–8.8] | 8.4 [8.3–8.5] | 1.8 [1.7–1.8] | 0.6 [0.5–0.6] | 4.9 [4.8–4.9] | 7.6 |
+| B-iso | rdeploy | 2 | 182–182 | 83.9 [82.1–85.7] | 83.3 [81.0–85.7] | 79.3 [74.8–83.7] | 3.9 [3.8–4.0] | 62.6 [62.5–62.7] | 12.2 |
+| B-iso | rboth | 2 | 182–182 | 83.6 [79.6–87.6] | 85.8 [84.4–87.3] | 87.8 [85.6–90.1] | 24.3 [23.4–25.2] | 70.4 [69.4–71.4] | 59.7 |
+| C act tuned | rnet | 2 | 14–14 | 18.3 [17.9–18.7] | 14.6 [14.6–14.6] | 10.7 [10.5–10.9] | 9.2 [8.6–9.9] | 13.2 [13.0–13.4] | 14.9 |
+| C act tuned | rdeploy | 2 | 14–14 | 86.8 [74.5–99.1] | 34.9 [31.1–38.8] | 98.9 [98.0–99.8] | 38.8 [30.3–47.4] | 64.9 [64.7–65.1] | 100.0 |
+| C act tuned | rboth | 2 | 14–14 | 47.0 [44.2–49.9] | 86.2 [80.7–91.7] | 64.5 [62.4–66.5] | 89.7 [84.1–95.2] | 71.8 [71.7–72.0] | 100.0 |
+
+(1) Busy % = 100 × (1 − Δ(idle + iowait) / Δtotal) per core over 10-s windows from `/proc/stat`, logged by the load kit's sampler for the whole run (warm-up included). It counts user, kernel, interrupt and softirq time together; the split by kind of work was not recorded.
+
+(2) Under `rdeploy` and `rboth`, onnxruntime's worker threads spin while waiting (library default, step 39), so cores can show ≈ 100 % busy without doing useful inference work. Busy % shows how occupied a core is, not how much useful work it does.
+
+(3) B-iso pins the control thread to core 3 and moves our load, the sampler and the movable IRQs to cores 0–2; for A, B and C nothing is pinned, so 'core 3' is only a label there.
+
+(4) Config C (`C act tuned`) runs are ≈ 2 min long, so their means come from ≈ 14 samples against ≈ 180 for the 30-min Linux runs; on Config C the Linux side also runs the analytics app that sends the setpoints.
+
 **Relative lateness definition:** For Linux runs (`A`, `B`, `B-iso`), relative lateness is `L_rel = L_abs - min(L_abs)` within each run (wake-up floor `floor_us = min(L_abs)` subtracted). For Config C runs, lateness is wake-only (`wake_cyc` @ 160 MHz) relative to each run's best-case cycle using a least-squares fitted period (`analyze_latency.load_run(..., period_mode='fit')`).
 
 **Run length & block comparability:** Linux Phase 6a runs span 180,000 cycles (30 min), while Config C runs span 10,000 cycles. Splitting every run into consecutive 10,000-cycle blocks (`block_wcl_median_us`, `block_wcl_max_us`) places Linux and Config C maxima on the same 10,000-cycle horizon.
