@@ -59,7 +59,7 @@ Source: `results/phase5d/compare_configs.md` (Linux lateness relative to each ru
 ## 3. Changes Since M2
 
 - **M3 moved to Dec 1** (results by Nov 28).
-- **Scheduler wording (recommendation).** Config A uses Linux's default policy `SCHED_OTHER`. Since kernel 6.6 its fair scheduler is **EEVDF**, which replaced CFS ([kernel documentation](https://docs.kernel.org/scheduler/sched-eevdf.html)); our board runs 6.16. Proposed wording: "`SCHED_OTHER`, Linux's default fair scheduler (EEVDF since 6.6, previously CFS)". This changes no result: both are fair schedulers without real-time guarantees. **[TBD: team agreement]**
+- **Scheduler wording (recommendation).** Config A uses Linux's default policy `SCHED_OTHER`. Since kernel 6.6 its fair scheduler is **EEVDF**, which replaced CFS ([kernel documentation](https://docs.kernel.org/scheduler/sched-eevdf.html)); our board runs 6.16. Proposed wording: "`SCHED_OTHER`, Linux's default fair scheduler (EEVDF since 6.6, previously CFS)". This changes no result: both are fair schedulers without real-time guarantees. **Agreed (Nov 18).**
 - **Lateness definition unified (Phase 5d).** Linux runs: lateness relative to each run's own minimum (wake-up floor removed). Config C: wake-only DWT timestamps relative to the best cycle, with a fitted period. Absolute Linux values are kept in `results/phase5d/compare_long.csv`.
 - **Stress tiers renamed for clarity.** The old "50 %/100 %" tiers load **only core 0** (measured: cpu0 100 %, cores 1–3 ≈ 1–2 %). They are now called *core-0 medium / heavy*. A new **all-core** tier loads all four cores (100 % each).
 - **Paper scope (decided Nov 17).** The final report has ≤ 8 pages for experiments and results. Realistic load becomes the main result; the `stress-ng` data becomes the controlled synthetic reference.
@@ -190,6 +190,8 @@ Source: `results/phase5d/compare_configs.md`. WCL in µs, mean [min–max] of 3 
 
 ## 7. In Progress: Realistic Load and End-to-End Command Delivery
 
+> **Update (Nov 18):** this work is finished; setup, results and prediction verdicts are in `docs/Week_11_Progress_Report.md`. The text below is the Nov 17 state.
+
 **Why.** `stress-ng` creates busy *programs*, which `SCHED_FIFO` can always preempt. A deployed edge device also does work inside the kernel that a real-time thread cannot simply preempt: network interrupts, network processing (softirqs, up to 8 ms per round on this board) and driver code. Phase 6a tests A/B/B-iso/C under two realistic loads:
 - **Network burst (`rnet`):** the PC sends as fast as the Wi-Fi allows (measured 6.3–6.7 MB/s); the board receives and discards it.
 - **Production (`rdeploy`):** the PC streams the CWRU vibration signal at its real rate (48 kB/s); a Docker container on the board runs a 1D-CNN (ONNX Runtime) on every 85.33 ms window, logs results and sends a one-second summary upstream (UDP), like an IIoT edge node. The CNN has random weights on purpose: it is background load, not a classifier.
@@ -226,5 +228,5 @@ Source: `results/phase5d/compare_configs.md`. WCL in µs, mean [min–max] of 3 
 | ≈ Nov 22–24 | Huy | Repeat 2 of all realistic runs |
 | Nov 25–28 | Huy | Analysis, figures, results freeze |
 | **[TBD]** | Akash (remote) | **[TBD: tasks]** |
-| Nov 29–30 | **[TBD]** | P5.5 slide deck |
-| Dec 1 | **[TBD]** | P5.6 presentation and demo (**[TBD: demo]**) |
+| Nov 29–30 | Akash | P5.5 slide deck |
+| Dec 1 | Huy and Akash | P5.6 presentation and demo (**[TBD: demo]**) |
