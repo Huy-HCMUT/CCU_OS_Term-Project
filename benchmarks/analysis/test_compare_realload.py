@@ -453,5 +453,209 @@ def test_load_evidence_table_pipe_count_matches_header(tmp_path):
         assert count_unescaped_pipes(ln) == header_pipes
 
 
+def test_parse_thermal_cpu_busy_and_missing_cases(tmp_path):
+    # 3 rows with one empty busy_cpu2 cell (realload.sh header)
+    p = tmp_path / "thermal_B_0_iso_rboth.csv"
+    p.write_text(
+        "time_s,busy_cpu0,busy_cpu1,busy_cpu2,busy_cpu3,temp_max_c,freq_cpu0_khz,freq_cpu1_khz,freq_cpu2_khz,freq_cpu3_khz,cooling_states\n"
+        "100.0,10.0,20.0,30.0,40.0,55.0,2016000,2016000,2016000,2016000,0;0\n"
+        "110.0,20.0,40.0,,60.0,58.5,2016000,2016000,2016000,2016000,0;0\n"
+        "120.0,30.0,60.0,90.0,80.0,57.0,2016000,2016000,2016000,2016000,0;0\n",
+        encoding="utf-8",
+    )
+    res = compare_realload._parse_thermal(p)
+    assert res["busy_samples"] == 3
+    assert res["busy_mean_cpu0"] == pytest.approx(20.0)
+    assert res["busy_mean_cpu1"] == pytest.approx(40.0)
+    assert res["busy_mean_cpu2"] == pytest.approx(60.0)  # mean of 30.0 and 90.0
+    assert res["busy_mean_cpu3"] == pytest.approx(60.0)
+    assert res["busy_max_cpu0"] == pytest.approx(30.0)
+    assert res["busy_max_cpu1"] == pytest.approx(60.0)
+    assert res["busy_max_cpu2"] == pytest.approx(90.0)
+    assert res["busy_max_cpu3"] == pytest.approx(80.0)
+    assert res["busy_mean_all"] == pytest.approx(45.0)
+    assert res["temp_max_c"] == pytest.approx(58.5)
+
+    # Missing thermal file -> all busy values NaN, no error
+    missing = compare_realload._parse_thermal(tmp_path / "does_not_exist.csv")
+    assert np.isnan(missing["busy_samples"])
+    assert np.isnan(missing["busy_mean_cpu0"])
+    assert np.isnan(missing["busy_max_cpu3"])
+    assert np.isnan(missing["busy_mean_all"])
+
+    # Thermal file without busy_* columns -> busy values NaN, temp_max_c still read
+    no_busy = tmp_path / "thermal_no_busy.csv"
+    no_busy.write_text(
+        "time_s,temp_max_c,freq_cpu0_khz,cooling_states\n"
+        "100.0,61.2,2016000,0;0\n",
+        encoding="utf-8",
+    )
+    nb_res = compare_realload._parse_thermal(no_busy)
+    assert nb_res["temp_max_c"] == pytest.approx(61.2)
+    assert np.isnan(nb_res["busy_samples"])
+    assert np.isnan(nb_res["busy_mean_cpu0"])
+    assert np.isnan(nb_res["busy_max_cpu3"])
+    assert np.isnan(nb_res["busy_mean_all"])
+
+
+def test_build_markdown_cpu_busy_section_and_chart(tmp_path):
+    small_df = pd.DataFrame(
+        [
+            {
+                "series": "B-iso",
+                "tier": "rboth",
+                "rep": 1,
+                "file": "real_r1/B_0_iso_rboth.csv",
+                "n": 180000,
+                "sigma_us": 100.0,
+                "p999_us": 900.0,
+                "wcl_us": 1500.0,
+                "dmr_1000_pct": 0.2,
+                "dmr_200_pct": 1.0,
+                "wcl_abs_us": 1550.0,
+                "dmr_1000_abs_pct": 0.25,
+                "floor_us": 50.0,
+                "n_blocks": 18,
+                "block_wcl_median_us": 1200.0,
+                "block_wcl_max_us": 1500.0,
+                "counter_span_s": np.nan,
+                "irq_total_per_cpu": "",
+                "irq_total_delta": np.nan,
+                "top5_irqs": "",
+                "dev_irq_per_cpu": "",
+                "ipi_resched_per_cpu": "",
+                "ipi_call_per_cpu": "",
+                "ipi_tbcast_per_cpu": "",
+                "softirq_net_rx_delta": np.nan,
+                "softirq_net_rx_per_cpu": "",
+                "softirq_net_tx_delta": np.nan,
+                "softirq_net_tx_per_cpu": "",
+                "softirq_block_delta": np.nan,
+                "softirq_block_per_cpu": "",
+                "softirq_timer_delta": np.nan,
+                "softirq_timer_per_cpu": "",
+                "softirq_sched_delta": np.nan,
+                "softirq_sched_per_cpu": "",
+                "softirq_rcu_delta": np.nan,
+                "softirq_rcu_per_cpu": "",
+                "wlan0_rx_bytes_delta": np.nan,
+                "wlan0_rx_packets_delta": np.nan,
+                "wlan0_tx_bytes_delta": np.nan,
+                "wlan0_tx_packets_delta": np.nan,
+                "pswpin_delta": np.nan,
+                "pswpout_delta": np.nan,
+                "pgmajfault_delta": np.nan,
+                "temp_max_c": 61.6,
+                "freq_min_khz": 2016000.0,
+                "throttled": False,
+                "busy_samples": 182,
+                "busy_mean_cpu0": 80.0,
+                "busy_mean_cpu1": 90.0,
+                "busy_mean_cpu2": 85.0,
+                "busy_mean_cpu3": 25.2,
+                "busy_max_cpu0": 95.0,
+                "busy_max_cpu1": 99.0,
+                "busy_max_cpu2": 96.0,
+                "busy_max_cpu3": 41.5,
+                "busy_mean_all": 70.05,
+                "infer_count": np.nan,
+                "infer_rate_hz": np.nan,
+                "infer_p50_us": np.nan,
+                "infer_p99_us": np.nan,
+                "pc_avg_rate_Bps": np.nan,
+                "pc_reconnects": np.nan,
+                "pc_ingest_rate_Bps": np.nan,
+                "pc_ingest_late_skips": np.nan,
+                "loadcheck": "",
+                "irqs_moved": "",
+                "wifi_irq": "",
+            },
+            {
+                "series": "B-iso",
+                "tier": "rboth",
+                "rep": 2,
+                "file": "real_r2/B_0_iso_rboth.csv",
+                "n": 180000,
+                "sigma_us": 100.0,
+                "p999_us": 900.0,
+                "wcl_us": 1600.0,
+                "dmr_1000_pct": 0.1,
+                "dmr_200_pct": 1.0,
+                "wcl_abs_us": 1650.0,
+                "dmr_1000_abs_pct": 0.15,
+                "floor_us": 50.0,
+                "n_blocks": 18,
+                "block_wcl_median_us": 1300.0,
+                "block_wcl_max_us": 1600.0,
+                "counter_span_s": np.nan,
+                "irq_total_per_cpu": "",
+                "irq_total_delta": np.nan,
+                "top5_irqs": "",
+                "dev_irq_per_cpu": "",
+                "ipi_resched_per_cpu": "",
+                "ipi_call_per_cpu": "",
+                "ipi_tbcast_per_cpu": "",
+                "softirq_net_rx_delta": np.nan,
+                "softirq_net_rx_per_cpu": "",
+                "softirq_net_tx_delta": np.nan,
+                "softirq_net_tx_per_cpu": "",
+                "softirq_block_delta": np.nan,
+                "softirq_block_per_cpu": "",
+                "softirq_timer_delta": np.nan,
+                "softirq_timer_per_cpu": "",
+                "softirq_sched_delta": np.nan,
+                "softirq_sched_per_cpu": "",
+                "softirq_rcu_delta": np.nan,
+                "softirq_rcu_per_cpu": "",
+                "wlan0_rx_bytes_delta": np.nan,
+                "wlan0_rx_packets_delta": np.nan,
+                "wlan0_tx_bytes_delta": np.nan,
+                "wlan0_tx_packets_delta": np.nan,
+                "pswpin_delta": np.nan,
+                "pswpout_delta": np.nan,
+                "pgmajfault_delta": np.nan,
+                "temp_max_c": 64.8,
+                "freq_min_khz": 2016000.0,
+                "throttled": False,
+                "busy_samples": 182,
+                "busy_mean_cpu0": 82.0,
+                "busy_mean_cpu1": 92.0,
+                "busy_mean_cpu2": 87.0,
+                "busy_mean_cpu3": 23.4,
+                "busy_max_cpu0": 97.0,
+                "busy_max_cpu1": 100.0,
+                "busy_max_cpu2": 98.0,
+                "busy_max_cpu3": 48.2,
+                "busy_mean_all": 71.10,
+                "infer_count": np.nan,
+                "infer_rate_hz": np.nan,
+                "infer_p50_us": np.nan,
+                "infer_p99_us": np.nan,
+                "pc_avg_rate_Bps": np.nan,
+                "pc_reconnects": np.nan,
+                "pc_ingest_rate_Bps": np.nan,
+                "pc_ingest_late_skips": np.nan,
+                "loadcheck": "",
+                "irqs_moved": "",
+                "wifi_irq": "",
+            },
+        ]
+    )
+    md_text = compare_realload._build_markdown(small_df, {})
+    k_pos = md_text.index("## Kernel work on CPU 3")
+    b_pos = md_text.index("## CPU busy per core")
+    n_pos = md_text.index("**Relative lateness definition:**")
+    assert k_pos < b_pos < n_pos
+    assert (
+        "| B-iso | rboth | 2 | 182–182 | 81.0 [80.0–82.0] | 91.0 [90.0–92.0] | 86.0 [85.0–87.0] | 24.3 [23.4–25.2] | 70.6 [70.0–71.1] | 48.2 |"
+        in md_text
+    )
+
+    chart_path = compare_realload._plot_core_busy(small_df, tmp_path)
+    assert chart_path.exists()
+    assert chart_path.name == "core_busy.png"
+
+
+
 
 

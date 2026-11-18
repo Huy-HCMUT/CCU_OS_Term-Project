@@ -267,6 +267,16 @@ def _parse_thermal(thermal_path: Path) -> dict:
         "temp_max_c": np.nan,
         "freq_min_khz": np.nan,
         "throttled": None,
+        "busy_samples": np.nan,
+        "busy_mean_cpu0": np.nan,
+        "busy_mean_cpu1": np.nan,
+        "busy_mean_cpu2": np.nan,
+        "busy_mean_cpu3": np.nan,
+        "busy_max_cpu0": np.nan,
+        "busy_max_cpu1": np.nan,
+        "busy_max_cpu2": np.nan,
+        "busy_max_cpu3": np.nan,
+        "busy_mean_all": np.nan,
     }
     if not thermal_path.exists():
         return info
@@ -299,6 +309,25 @@ def _parse_thermal(thermal_path: Path) -> dict:
             if throttled:
                 break
     info["throttled"] = throttled
+
+    if "busy_cpu0" in df.columns:
+        s0 = pd.to_numeric(df["busy_cpu0"], errors="coerce").dropna()
+        if not s0.empty:
+            info["busy_samples"] = int(s0.size)
+
+    busy_means: list[float] = []
+    for c in range(4):
+        col = f"busy_cpu{c}"
+        if col in df.columns:
+            vals = pd.to_numeric(df[col], errors="coerce").dropna()
+            if not vals.empty:
+                m = float(vals.mean())
+                info[f"busy_mean_cpu{c}"] = m
+                info[f"busy_max_cpu{c}"] = float(vals.max())
+                busy_means.append(m)
+    if len(busy_means) == 4:
+        info["busy_mean_all"] = float(np.mean(busy_means))
+
     return info
 
 
@@ -699,6 +728,63 @@ def _build_markdown(
     lines.extend(
         [
             "",
+            "## CPU busy per core",
+            "",
+            "| Series | Tier | n runs | Samples per run | Core 0 % | Core 1 % | Core 2 % | Core 3 % | Whole board % | Core 3 highest 10-s % |",
+            "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    if "busy_mean_all" in long_df.columns:
+        for series in SERIES_ORDER:
+            for tier in ("rnet", "rdeploy", "rboth"):
+                sub = long_df[(long_df["series"] == series) & (long_df["tier"] == tier)]
+                if sub.empty:
+                    continue
+                sub_b = sub[sub["busy_mean_all"].notna()]
+                if sub_b.empty:
+                    continue
+                s_vals = sub_b["busy_samples"].dropna().to_numpy(dtype=np.float64)
+                samples_str = (
+                    f"{int(round(float(np.min(s_vals))))}–{int(round(float(np.max(s_vals))))}"
+                    if s_vals.size
+                    else "—"
+                )
+                core_cells: list[str] = []
+                for c in range(4):
+                    c_vals = sub_b[f"busy_mean_cpu{c}"].dropna().to_numpy(dtype=np.float64)
+                    core_cells.append(_fmt_range(c_vals, 1) if c_vals.size else "—")
+                board_vals = sub_b["busy_mean_all"].dropna().to_numpy(dtype=np.float64)
+                board_str = _fmt_range(board_vals, 1) if board_vals.size else "—"
+                c3_max_vals = sub_b["busy_max_cpu3"].dropna().to_numpy(dtype=np.float64)
+                c3_max_str = f"{float(np.max(c3_max_vals)):.1f}" if c3_max_vals.size else "—"
+                lines.append(
+                    f"| {series} | {tier} | {len(sub_b)} | {samples_str} | "
+                    + " | ".join(core_cells)
+                    + f" | {board_str} | {c3_max_str} |"
+                )
+
+    lines.extend(
+        [
+            "",
+            "(1) Busy % = 100 × (1 − Δ(idle + iowait) / Δtotal) per core over 10-s windows from `/proc/stat`, "
+            "logged by the load kit's sampler for the whole run (warm-up included). It counts user, kernel, "
+            "interrupt and softirq time together; the split by kind of work was not recorded.",
+            "",
+            "(2) Under `rdeploy` and `rboth`, onnxruntime's worker threads spin while waiting (library default, step 39), "
+            "so cores can show ≈ 100 % busy without doing useful inference work. Busy % shows how occupied a core is, "
+            "not how much useful work it does.",
+            "",
+            "(3) B-iso pins the control thread to core 3 and moves our load, the sampler and the movable IRQs to cores 0–2; "
+            "for A, B and C nothing is pinned, so 'core 3' is only a label there.",
+            "",
+            "(4) Config C (`C act tuned`) runs are ≈ 2 min long, so their means come from ≈ 14 samples against ≈ 180 for "
+            "the 30-min Linux runs; on Config C the Linux side also runs the analytics app that sends the setpoints.",
+        ]
+    )
+
+    lines.extend(
+        [
+            "",
             "**Relative lateness definition:** For Linux runs (`A`, `B`, `B-iso`), relative lateness is "
             "`L_rel = L_abs - min(L_abs)` within each run (wake-up floor `floor_us = min(L_abs)` subtracted). "
             "For Config C runs, lateness is wake-only (`wake_cyc` @ 160 MHz) relative to each run's best-case cycle "
@@ -926,6 +1012,97 @@ def _plot_cpu3_kernel_work(cpu_df: pd.DataFrame, out_dir: Path) -> Path:
     return out_path
 
 
+def _plot_core_busy(long_df: pd.DataFrame, out_dir: Path) -> Path:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
+
+    plt.rcParams.update(
+        {
+            "figure.facecolor": "#ffffff",
+            "axes.facecolor": "#ffffff",
+            "savefig.facecolor": "#ffffff",
+            "font.size": 9,
+            "axes.grid": True,
+            "grid.color": "#e4e3df",
+            "grid.linewidth": 0.6,
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "legend.frameon": False,
+        }
+    )
+
+    chart_tiers = ("rnet", "rdeploy", "rboth")
+    chart_colors = {
+        "A": "#2a78d6",
+        "B": "#fb923c",
+        "B-iso": "#4b5563",
+        "C act tuned": "#14532d",
+        "C IPC tuned": "#10b981",
+    }
+
+    fig, axes = plt.subplots(1, 3, figsize=(11.2, 4.0), sharey=True)
+    xs = np.arange(4, dtype=float)
+    seen_series: set[str] = set()
+
+    for ax, tier in zip(axes, chart_tiers):
+        present_series: list[str] = []
+        if not long_df.empty and "busy_mean_cpu0" in long_df.columns:
+            for series in SERIES_ORDER:
+                sub = long_df[(long_df["series"] == series) & (long_df["tier"] == tier)]
+                if sub.empty:
+                    continue
+                if any(sub[f"busy_mean_cpu{c}"].notna().any() for c in range(4)):
+                    present_series.append(series)
+
+        if present_series:
+            n_ser = len(present_series)
+            bar_width = min(0.20, 0.76 / n_ser)
+            for idx, series in enumerate(present_series):
+                sub = long_df[(long_df["series"] == series) & (long_df["tier"] == tier)]
+                offset = (idx - (n_ser - 1) / 2.0) * bar_width
+                color = chart_colors.get(series, "#333333")
+                seen_series.add(series)
+                for c in range(4):
+                    vals = sub[f"busy_mean_cpu{c}"].dropna().to_numpy(dtype=np.float64)
+                    if vals.size == 0:
+                        continue
+                    mean_v = float(np.mean(vals))
+                    low_err = mean_v - float(np.min(vals))
+                    high_err = float(np.max(vals)) - mean_v
+                    xpos = xs[c] + offset
+                    ax.bar(xpos, mean_v, width=bar_width, color=color, zorder=3)
+                    ax.errorbar(
+                        [xpos],
+                        [mean_v],
+                        yerr=[[low_err], [high_err]],
+                        fmt="none",
+                        ecolor="#1f2937",
+                        elinewidth=1.0,
+                        capsize=2.5,
+                        zorder=4,
+                    )
+
+        ax.set_xticks(xs, ["0", "1", "2", "3"])
+        ax.set_xlabel("Core")
+        ax.set_ylim(0, 100)
+        ax.set_title(tier, fontsize=10)
+
+    axes[0].set_ylabel("Mean busy (%)")
+    if seen_series:
+        handles = [Patch(facecolor=chart_colors.get(s, "#333333"), label=s) for s in SERIES_ORDER if s in seen_series]
+        fig.legend(handles=handles, loc="lower center", ncol=len(handles), fontsize=9)
+        fig.tight_layout(rect=[0.0, 0.08, 1.0, 1.0])
+    else:
+        fig.tight_layout()
+
+    out_path = out_dir / "core_busy.png"
+    fig.savefig(out_path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
 def compare_realload(raw_dir: Path, ref_csv: Path, out_dir: Path) -> tuple[pd.DataFrame, str, Path]:
     records = _collect_realload_runs(raw_dir)
     ref_map = _load_reference_wcl(ref_csv)
@@ -977,6 +1154,16 @@ def compare_realload(raw_dir: Path, ref_csv: Path, out_dir: Path) -> tuple[pd.Da
         "temp_max_c",
         "freq_min_khz",
         "throttled",
+        "busy_samples",
+        "busy_mean_cpu0",
+        "busy_mean_cpu1",
+        "busy_mean_cpu2",
+        "busy_mean_cpu3",
+        "busy_max_cpu0",
+        "busy_max_cpu1",
+        "busy_max_cpu2",
+        "busy_max_cpu3",
+        "busy_mean_all",
         "infer_count",
         "infer_rate_hz",
         "infer_p50_us",
@@ -1006,11 +1193,13 @@ def compare_realload(raw_dir: Path, ref_csv: Path, out_dir: Path) -> tuple[pd.Da
 
     chart_path = _plot_block_wcl(records, ref_map, out_dir)
     cpu3_chart_path = _plot_cpu3_kernel_work(cpu_df, out_dir)
+    core_busy_path = _plot_core_busy(long_df, out_dir)
     print(f"Wrote {long_csv}")
     print(f"Wrote {cpu_csv}")
     print(f"Wrote {md_path}")
     print(f"Wrote {chart_path}")
     print(f"Wrote {cpu3_chart_path}")
+    print(f"Wrote {core_busy_path}")
     return long_df, md_text, chart_path
 
 
