@@ -1,4 +1,4 @@
-# Phase 6a Realistic-Load Comparison (R-net, R-deploy & R-both)
+# Realistic-Load Comparison: Phase 6a (A, B, B-iso) and Phase 6b (C act) under R-net, R-deploy & R-both
 
 ## Timing Summary
 

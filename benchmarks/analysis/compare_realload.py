@@ -591,7 +591,7 @@ def _build_markdown(
     if cpu_df is None:
         cpu_df = cpu_interference(long_df)
     lines = [
-        "# Phase 6a Realistic-Load Comparison (R-net, R-deploy & R-both)",
+        "# Realistic-Load Comparison: Phase 6a (A, B, B-iso) and Phase 6b (C act) under R-net, R-deploy & R-both",
         "",
         "## Timing Summary",
         "",
@@ -814,7 +814,7 @@ def _plot_block_wcl(records: list[dict], ref_map: dict[tuple[str, str], tuple[st
     ax.set_xlim(-0.5, len(SERIES_ORDER) - 0.5)
     ax.set_xlabel("Configuration series")
     ax.set_ylabel("10,000-cycle block WCL (µs)")
-    ax.set_title("Phase 6a realistic-load block WCL vs Phase 5d references", fontsize=10)
+    ax.set_title("Realistic-load block WCL (Phase 6a/6b) vs Phase 5d references", fontsize=10)
     if has_points:
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), fontsize=8, ncol=4)
     fig.tight_layout()
@@ -1019,7 +1019,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--raw", type=Path, default=repo / "results" / "raw")
     parser.add_argument("--ref", type=Path, default=repo / "results" / "phase5d" / "compare_long.csv")
-    parser.add_argument("--out", type=Path, default=repo / "results" / "phase6a")
+    parser.add_argument("--out", type=Path, default=repo / "results" / "phase6b")
     args = parser.parse_args(argv)
     compare_realload(args.raw, args.ref, args.out)
     return 0

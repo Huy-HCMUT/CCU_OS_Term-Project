@@ -1,4 +1,33 @@
-# Latency analysis
+# Analysis scripts
+
+All scripts run on the PC (`.venv\Scripts\python <script> --help` for options), read only `results/raw/`, and write to `results/`. Each has a test file `test_<name>.py` with synthetic data (`cd benchmarks/analysis; python -m pytest -q`; nothing is written to `results/`).
+
+| Script | Phase | Reads | Writes | What it computes |
+| :--- | :--- | :--- | :--- | :--- |
+| `analyze_latency.py` | 2, 4.5, 5, 5d | the per-cycle CSVs of one raw folder (`--raw`) | `summary.{md,csv}` and plots in `--out` | Lateness KPIs per run: mean, σ_L, p99, p99.9, WCL, DMR at 0.2 / 1 ms (details below). |
+| `analyze_referee.py` | 4.5, 5 | `config_c_dwt_*` + `config_c_referee_*` (`--raw`) | `referee_vs_dut.{md,csv}` (`--out`) | The referee board's view of each Config C run against the DUT's own DWT clock (period, offset in ppm, jitter, misses). |
+| `analyze_ipc.py` | 5, 5b, 5d | `config_c_ipc_seq_*`, `config_c_ipc_sender_*` | `ipc_summary.{md,csv}` | Setpoint delivery over RouterBridge: messages sent / applied, round trip, age of the applied setpoint. |
+| `pulse_pattern.py` | 5, 5b | `config_c_dwt_*` | `pulse_pattern.{md,csv}` | Periodic disturbances in the MCU pulse intervals. |
+| `compare_baseline_ipc.py` | 5 | `results/summary.csv`, `results/baseline_dwtref/`, `results/ipc/` summaries | `results/ipc/compare_baseline_vs_ipc.md` | Phase 4.5 baseline vs DWT-referee re-run vs IPC, per stress tier. |
+| `aggregate_repeats.py` | 5b, 5d | the per-folder `results/*/summary.csv` | `repeats_summary.md`, `repeats_long.csv` (`--out`) | Config C repeats: mean [min–max] over repeats per variant and tier. |
+| `ipc_attribution.py` | 5b, 5d | IPC raw folders (`--raw`, several) | `ipc_attribution.{md,csv}` | How often a late MCU pulse coincides with a setpoint arrival. |
+| `compare_configs.py` | 5d | `linux_r*/` and all Config C folders | `results/phase5d/` | **Headline comparison** of A, B, B-iso and C under `stress-ng`, one lateness definition (`L_rel`). |
+| `compare_realload.py` | 6a, 6b | `real_r*/`, `act_tuned*/`, `results/phase5d/compare_long.csv` (`--ref`) | `results/phase6b/` (`--out`) | **Headline comparison** under realistic load; load evidence per run; kernel work per CPU (`cpu_interference.csv`). |
+| `analyze_drive.py` | 6b | `act_tuned*/` (`config_c_act_*`, `config_c_drive_*`, IPC logs) | `results/phase6b/drive.md`, `drive_long.csv` | Every speed command matched at the emulated drive: lost / wrong / extra, tick-to-drive delays. |
+
+The commands that produced the committed results:
+
+```bash
+# Phase 5d (from the repository root)
+python benchmarks/analysis/compare_configs.py --raw results/raw --out results/phase5d
+# Phase 6a + 6b
+python benchmarks/analysis/compare_realload.py --raw results/raw --ref results/phase5d/compare_long.csv --out results/phase6b
+python benchmarks/analysis/analyze_drive.py --raw results/raw --out results/phase6b
+```
+
+Tests 1–5 (Phase 2) use `results/parse_advanced_metrics.py` and `results/plot_advanced_results.py`.
+
+## `analyze_latency.py` in detail
 
 `analyze_latency.py` turns raw per-cycle logs from the benchmark runs into the
 KPIs defined in `docs/Project_Scope_Statement.md` §4.3.2 and the figures listed in §5.

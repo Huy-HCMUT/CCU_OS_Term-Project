@@ -67,10 +67,57 @@ Every configuration runs the **same minimal 10 ms control tick**; the analytics 
 | 2 | Configs A and B under `stress-ng` 0/50/100 % + Tests 1–5 (I/O, endurance, affinity, mlock, FIFO vs RR) | Done |
 | 4.5 | Config C baseline: MCU timing under Linux stress, no IPC | Done |
 | 5 / 5b–5d | Config C with IPC, tuned variant, repeats, fair three-way comparison | Done |
-| 6a | Realistic load tiers `rnet` / `rdeploy` (and `rboth`) for A, B, B-iso | Runs in progress |
-| 6b | Full chain to an emulated drive (Config C `act`) | Runs in progress |
+| 6a | Realistic load tiers `rnet` / `rdeploy` / `rboth` for A, B, B-iso (2 repeats) | Done |
+| 6b | Full chain to an emulated drive (Config C `act`, 4 load tiers, 2 repeats) | Done |
 
 **Milestones:** M3 presentation + demo on Dec 1, 2026; M4 final report (IEEE format, ≤ 15 pages) on Jan 5, 2027.
+
+---
+
+## 🗺️ Where to Find the Results
+
+**Start here (headline results):**
+
+| Question | File |
+| :--- | :--- |
+| A vs B vs B-iso vs C under synthetic `stress-ng` load (one lateness definition for all) | `results/phase5d/compare_configs.md` (+ `wcl_by_tier.png`, `cdf_100.png`, `cdf_allcore.png`) |
+| The same configs under realistic load (`rnet`, `rdeploy`, `rboth`) | `results/phase6b/realload.md` (+ `block_wcl.png`, `cpu3_kernel_work.png`) |
+| Does every speed command reach the emulated drive, and how fast? | `results/phase6b/drive.md` |
+
+**Every phase, from board run to result** (all paths relative to the repository root; the board scripts run on the UNO Q, the harness and analysis on the PC):
+
+| Phase | What it tests | Run with | Raw data in `results/raw/` | Analysis (`benchmarks/analysis/` unless noted) | Results |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 2 | A and B under `stress-ng` 0 / 50 / 100 % | `benchmarks/run_benchmark.sh` | `A_*.csv`, `B_*.csv` | `analyze_latency.py` | `results/summary.md`, `results/plots/lateness_*.png` |
+| 2 (Tests 1–5) | I/O contention, 10,000-cycle endurance, core affinity, `mlockall`, FIFO vs RR | `benchmarks/run_advanced_experiments.sh` | `test1_*.csv` … `test5_*.csv` | `results/parse_advanced_metrics.py`, `results/plot_advanced_results.py` | `results/plots/test*.png` |
+| 4.5 | Config C baseline: MCU loop under Linux stress, no IPC (first referee) | harness modes `sanity`, `0`, `50`, `100` | `C_*.csv`, `config_c_dwt_*.csv`, `config_c_referee_*.csv` | `analyze_latency.py`, `analyze_referee.py` | `results/summary.md` (C rows), `results/referee_p45.md` |
+| Clock check | Why the MCU's Zephyr clock drifts against its DWT counter | `benchmarks/diagnostics/run_clock_check.py` | `clock_diagnostics_2026-10-19.csv` | same script | `results/clock_diagnostics_summary.md` |
+| 5 | Config C with IPC (Linux setpoints over RouterBridge); baseline re-run with the DWT referee | harness `b2-*`, `ipc-*` | `baseline_dwtref/`, `ipc/` | `analyze_latency.py`, `analyze_referee.py`, `analyze_ipc.py`, `pulse_pattern.py`, `compare_baseline_ipc.py` | `results/baseline_dwtref/`, `results/ipc/` (`compare_baseline_vs_ipc.md`) |
+| 5b / 5c | Repeats; tuned variant (MCU loop above the bridge thread); stock baseline repeat 4 | harness `b2-*`, `ipc-*`, `b2t-*`, `ipct-*` with `--rep N` | `*_r2/`, `*_r3/`, `baseline_dwtref_r4/`, `baseline_tuned*/`, `ipc_tuned*/` | the Phase 5 scripts + `aggregate_repeats.py`, `ipc_attribution.py` | `results/phase5b/`, one `results/<folder>/` per raw folder |
+| 5d | Fair comparison of A, B, B-iso and C, incl. all-core stress | `benchmarks/run_benchmark_5d.sh`; harness `*-allcore` | `linux_r1/`–`linux_r3/`, `*_allcore*/` | `compare_configs.py` (+ `aggregate_repeats.py`, `ipc_attribution.py`) | **`results/phase5d/`**, `results/linux_r*/` |
+| 6a | A, B, B-iso under realistic load (`rnet`, `rdeploy`, `rboth`) | `benchmarks/run_benchmark_6r.sh` + `benchmarks/realload/pc_traffic.py` | `real_r1/`, `real_r2/`, `real_calibration/` | `compare_realload.py` | **`results/phase6b/realload.md`** (Phase 6a and 6b are analysed together) |
+| 6b | Full chain: Config C under the same loads, speed command as 500 Hz PWM to board 3 | harness `act-*`; PWM check `benchmarks/diagnostics/run_pwm_loopback.py` | `act_tuned*/`, `pwm_loopback_2026-11-17/` | `compare_realload.py`, `analyze_drive.py` | **`results/phase6b/`**, `results/diagnostics/pwm_loopback_summary.md` |
+
+More detail: `results/README.md` (every results folder) and `benchmarks/analysis/README.md` (every analysis script).
+
+## 🔤 Folder and File Names
+
+| Name | Meaning |
+| :--- | :--- |
+| `A`, `B`, `B-iso` (`_iso`) | The Linux configs (see "What Is Measured"); `_iso` = B on an isolated core 3 (affinity only, no `isolcpus`). |
+| `C`, `config_c_*` | Config C (MCU loop on the STM32). |
+| `baseline` | Config C without IPC: the MCU loop runs, Linux sends nothing. |
+| `ipc` | Config C with IPC: Linux analytics send setpoints to the MCU ("latest value wins"). |
+| `dwtref`, `b2` | Runs timed by the second, DWT-based referee (Phase 5 on); `b2` is the harness name for the baseline variant. |
+| `tuned`, `b2t`, `ipct` | The MCU loop runs at thread priority 4, above RouterBridge's `bridge` thread (5); "stock" = loop at 14, below it. |
+| `act` | Tuned IPC plus the PWM speed command to the drive board (Phase 6b). |
+| `0`, `50`, `100` | `stress-ng` load in %, on core 0. |
+| `allcore` | `stress-ng` on all four cores. |
+| `rnet`, `rdeploy`, `rboth` | Realistic load: bulk network traffic from the PC / a sensor stream into a containerised CNN / both at once. |
+| `_r2`, `_r3`, … | Repeat number; no suffix = repeat 1. `real_r<N>` and `linux_r<N>` are the Linux repeats. |
+| `sanity` | A 20-cycle wiring and readout check before each run; not analysed. |
+| `p45` | Phase 4.5. |
+| `L_rel`, WCL, DMR | Lateness relative to the run's best cycle, worst-case lateness, deadline-miss rate at 1 ms (see `results/phase5d/compare_configs.md`). |
 
 ---
 
@@ -79,7 +126,8 @@ Every configuration runs the **same minimal 10 ms control tick**; the analytics 
 ```
 CCU_OS_Term Project/
 ├── README.md
-├── docs/                          # Scope statement, progress reports, submitted documents
+├── Operating System Term Project.pdf   # The course's assignment sheet
+├── docs/                          # Scope statement, progress reports, submitted documents (see docs/README.md)
 ├── data/                          # CWRU download/slicing script; processed frames in data/processed/
 ├── mpu_linux/                     # Linux benchmark for Configs A/B (dual_thread_bench.c, FFT, Makefile)
 ├── benchmarks/
@@ -94,8 +142,9 @@ CCU_OS_Term Project/
 │   └── tests/                     # Harness tests (mocked boards)
 ├── results/
 │   ├── raw/                       # Original measurements (read-only)
-│   ├── phase5b/, phase5d/, ...    # Generated summaries, tables and plots per phase
-│   └── plots/
+│   ├── phase5b/, phase5d/, phase6b/   # Cross-run summaries per phase (headline results)
+│   ├── <raw folder name>/         # Per-run-set analysis (e.g. ipc_tuned_r2/), same name as in raw/
+│   └── plots/                     # Phase 2 / 4.5 figures (see results/README.md)
 ├── paper_ieee/                    # IEEEtran report sources and presentation slides
 └── unused/                        # Files no longer used (see unused/README.md)
 ```
