@@ -12,7 +12,7 @@ All scripts run on the PC (`.venv\Scripts\python <script> --help` for options), 
 | `aggregate_repeats.py` | 5b, 5d | the per-folder `results/*/summary.csv` | `repeats_summary.md`, `repeats_long.csv` (`--out`) | Config C repeats: mean [min–max] over repeats per variant and tier. |
 | `ipc_attribution.py` | 5b, 5d | IPC raw folders (`--raw`, several) | `ipc_attribution.{md,csv}` | How often a late MCU pulse coincides with a setpoint arrival. |
 | `compare_configs.py` | 5d | `linux_r*/` and all Config C folders | `results/phase5d/` | **Headline comparison** of A, B, B-iso and C under `stress-ng`, one lateness definition (`L_rel`). |
-| `compare_realload.py` | 6a, 6b | `real_r*/`, `act_tuned*/`, `results/phase5d/compare_long.csv` (`--ref`) | `results/phase6b/` (`--out`) | **Headline comparison** under realistic load; load evidence per run; kernel work per CPU (`cpu_interference.csv`). |
+| `compare_realload.py` | 6a, 6b | `real_r*/`, `act_tuned*/`, `results/phase5d/compare_long.csv` (`--ref`) | `results/phase6b/` (`--out`) | **Headline comparison** under realistic load; load evidence per run; kernel work per CPU (`cpu_interference.csv`); CPU busy per core (`core_busy.png`). |
 | `analyze_drive.py` | 6b | `act_tuned*/` (`config_c_act_*`, `config_c_drive_*`, IPC logs) | `results/phase6b/drive.md`, `drive_long.csv` | Every speed command matched at the emulated drive: lost / wrong / extra, tick-to-drive delays. |
 
 The commands that produced the committed results:

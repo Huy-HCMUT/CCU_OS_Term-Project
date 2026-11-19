@@ -119,7 +119,7 @@ Choices a reader might question, and why we made them:
 | Question | File |
 | :--- | :--- |
 | A vs B vs B-iso vs C under synthetic `stress-ng` load (one lateness definition for all) | `results/phase5d/compare_configs.md` (+ `wcl_by_tier.png`, `cdf_100.png`, `cdf_allcore.png`) |
-| The same configs under realistic load (`rnet`, `rdeploy`, `rboth`) | `results/phase6b/realload.md` (+ `block_wcl.png`, `cpu3_kernel_work.png`) |
+| The same configs under realistic load (`rnet`, `rdeploy`, `rboth`) | `results/phase6b/realload.md` (+ `block_wcl.png`, `cpu3_kernel_work.png`, `core_busy.png`) |
 | Does every speed command reach the emulated drive, and how fast? | `results/phase6b/drive.md` |
 
 **Every phase, from board run to result** (all paths relative to the repository root; the board scripts run on the UNO Q, the harness and analysis on the PC):
