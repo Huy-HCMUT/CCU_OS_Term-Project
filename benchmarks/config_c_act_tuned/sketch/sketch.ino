@@ -144,6 +144,9 @@ int set_setpoint(int seq, int sp) {
   return seq;
 }
 
+// Runs on the bridge thread and writes the PWM and g_last_sp, which the loop also uses, so it
+// would race the loop if called mid-run. The harness calls it only before a run starts
+// (run_config_c_hardware_test.py: reset_ipc before START and start_zephyr_pulses).
 int reset_ipc(int dummy) {
   (void)dummy;
   g_sp_word = 100u;
@@ -255,6 +258,10 @@ void loop()
 
       // 3. RTOS Yield / Sleep: if > 3 ms remaining, sleep 6 ms to yield to Zephyr
       int32_t rem_us = (int32_t)(next_us - micros());
+      // Known latent issue (found in the PR #7 review, 2026-11-19): if a cycle starts more than
+      // about 3.5 ms late, delay(6) overshoots the next deadline and the lateness carries into the
+      // following cycles. Not triggered: measured Config C worst cases are in the microsecond range. Left as is
+      // so this file matches the code that produced the data; a fix would sleep only if rem_us > 7000.
       if (rem_us > 3000) {
         delay(6); // Calls k_sleep(6) -> CPU sleeps in WFI, yields to Zephyr scheduler
       }

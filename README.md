@@ -5,7 +5,7 @@
 
 ## 🎯 Key Results
 
-**Question:** can a 10 ms control loop keep its deadline while the same board runs heavy Linux work? **Answer:** on Linux, no; on the board's real-time MCU (Config C), yes: its worst-case lateness is about 140–200× smaller than the best Linux setup (B) and about 1,000× smaller than default Linux (A).
+**Question:** can a 10 ms control loop keep its deadline while the same board runs heavy Linux work? **Answer:** on Linux, no; on the board's real-time MCU (Config C), yes. Compared over the same number of cycles (10,000-cycle blocks), its worst-case lateness is about 30× smaller than the best Linux setup (B) and about 600× smaller than default Linux (A).
 
 ![Worst-case lateness per 10,000-cycle block under realistic load](results/phase6b/block_wcl.png)
 
@@ -18,9 +18,10 @@ Under the heaviest realistic load (`rboth`: bulk network traffic and a container
 | B-iso: B on a reserved core | 1.59–1.72 ms | 0.16–0.31 % |
 | **C: MCU loop, setpoints from Linux** | **0.0076–0.0105 ms** | **0** |
 
+- **Run lengths differ:** each Linux run is 180,000 cycles (30 min), each Config C run 10,000 cycles (100 s), and a longer run tends to catch a larger worst case. Per 10,000-cycle block, the typical worst case is A 5.57 ms, B 0.30 ms, B-iso 1.45 ms, C 0.009 ms (`Block WCL median` in `realload.md`). C's 0 misses rest on 20,000 cycles (2 runs).
 - **Full chain:** all 1,920 speed commands of the 8 Config C runs reached the emulated motor drive, none lost or wrong; the drive saw each new command 1.47–4.11 ms after the tick (mostly the 500 Hz PWM itself).
 - **Synthetic reference (`stress-ng` on all cores):** A 18.0–27.9 ms, Config C tuned IPC 0.0078 ms.
-- Lateness is measured relative to each run's best cycle. Limits: stock Linux kernel (not `PREEMPT_RT`), one board, emulated drive instead of a motor.
+- Lateness is measured relative to each run's best cycle. Linux runs use a fixed 2.016 GHz CPU clock (`performance` governor); Config C runs keep the board's default setting (`schedutil`). Limits: stock Linux kernel (not `PREEMPT_RT`), one board, emulated drive instead of a motor.
 
 Full tables: `results/phase6b/realload.md`, `results/phase6b/drive.md`, `results/phase5d/compare_configs.md`.
 
@@ -32,8 +33,8 @@ Full tables: `results/phase6b/realload.md`, `results/phase6b/drive.md`, `results
 - **Department:** Department of Computer Science & Information Engineering (CSIE)
 - **Institution:** National Chung Cheng University (CCU)
 - **Members:**
-  - **Member 1:** `[Quang-Huy Nguyen]` (Student ID: `[615461004]`)
-  - **Member 2:** `[Your Name]` (Student ID: `[Your Student ID]`)
+  - **Member 1:** Quang-Huy Nguyen (Student ID: 615461004)
+  - **Member 2:** An-Rui Peng (Student ID: 614461008)
 
 ---
 

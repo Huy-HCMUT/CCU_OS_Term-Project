@@ -23,10 +23,10 @@
 | B-iso: B on a reserved core | 1.59–1.72 ms | 0.16–0.31 % |
 | **C: MCU loop, setpoints from Linux** | **0.0076–0.0105 ms** | **0** |
 
-*Source: `results/phase6b/realload.md` (range over the 2 repeats).*
+*Source: `results/phase6b/realload.md` (range over the 2 repeats). Run lengths differ: each Linux run is 180,000 cycles (30 min), each Config C run 10,000 cycles (100 s), so C's 0 misses rest on 20,000 cycles.*
 
 Three headline findings:
-1. **Only the MCU keeps the deadline.** Config C's worst case is about 140–200× smaller than the best Linux setup (B; 165× on the means) and ≈ 1,000× smaller than default Linux (A), and it barely changes with load (6.3–10.5 µs from idle to the heaviest load).
+1. **Only the MCU keeps the deadline.** Compared over the same number of cycles (10,000-cycle blocks), Config C's worst case is about 30× smaller than the best Linux setup (B) and about 600× smaller than default Linux (A); it barely changes with load (6.3–10.5 µs from idle to the heaviest load). The full-run worst cases in the table differ more (≈ 165× and ≈ 1,000× on the means), but the Linux runs are 18× longer, which inflates that ratio.
 2. **Every command arrives.** All 1,920 speed commands of the 8 Config C runs reached the emulated drive: 0 lost, 0 wrong, 0 extra; the drive saw each new command 1.47–4.11 ms after the tick.
 3. **Isolating a core is not enough on a stock kernel.** B-iso (control thread alone on core 3) was *worse* than plain B under the combined load; the kernel's own work still reaches the reserved core, which was ≈ 24 % busy although all our load ran on the other cores.
 
@@ -164,7 +164,7 @@ We wrote 15 predictions down before the runs they predict and did not change the
 
 *Each point is the worst case of one 10,000-cycle block; dashed line = 1 ms deadline; horizontal markers = the same config under `stress-ng` (0 % and all-core). Source: `results/phase6b/block_wcl.png`.*
 
-How to read it: A's blocks sit at 4–15 ms whenever the CNN runs. B stays below 1 ms under the CNN alone but crosses it when network traffic is added. B-iso under `rboth` is above 1 ms in every block (36 of 36). Config C sits at 6–11 µs in every tier, two to three orders of magnitude lower.
+How to read it: A's blocks sit at 4–15 ms whenever the CNN runs. B stays below 1 ms under the CNN alone but crosses it when network traffic is added. B-iso under `rboth` is above 1 ms in every block (36 of 36). Config C sits at 6–11 µs in every tier: per 10,000-cycle block under `rboth`, about 30× below B's typical block (301 µs), 160× below B-iso's (1,452 µs) and 600× below A's (5,572 µs).
 
 ### 4.2 The full chain: does every command reach the drive?
 
@@ -253,7 +253,9 @@ Assumptions (not measured on a CNC): feed 6 m/min = 100 mm/s; one late 10 ms tic
 | A: Digital Twin host, normal priority | 10.7 ms | 1.07 mm | 8,500–17,000 |
 | B: Digital Twin host, top priority | 1.54 ms | 0.15 mm | 50–130 |
 | B-iso: Digital Twin host, reserved core | 1.72 ms | 0.17 mm | 560–1,120 |
-| **C: dedicated real-time MCU** | **0.0105 ms** | **0.001 mm** | **0** |
+| **C: dedicated real-time MCU** | **0.0105 ms** | **0.001 mm** | **none seen in 20,000 cycles (≈ 3.3 min)** |
+
+*Worst delays come from runs of different length (Linux 30 min, C 100 s). Late ticks per hour for A, B and B-iso are the measured miss rates × 360,000 ticks; for C no rate can be extrapolated from 0 misses in 20,000 cycles, although its worst case (≈ 10 µs) is about 100× below the 1 ms limit.*
 
 The design lesson matches how industry builds such cells: let the Digital Twin host be as busy as it likes (its advice may arrive ≈ 16 ms late, which is harmless for wear that develops over minutes), but run the loop that acts on the machine on a dedicated real-time processor. Truly fast protection (emergency stop) stays on separate safety hardware in any case.
 
@@ -279,7 +281,8 @@ The design lesson matches how industry builds such cells: let the Digital Twin h
 - **One board set, emulated drive** (no motor); the CNN has random weights (background load).
 - **The CNN's threads spin while waiting.** By default, ONNX Runtime lets idle worker threads spin (busy-wait: keep checking for work instead of sleeping) for slightly faster inference ([ONNX Runtime thread management](https://onnxruntime.ai/docs/performance/tune-performance/threading.html)). We kept the default, as a typical deployment would, so `rdeploy` and `rboth` occupy more CPU time than the inference itself needs (about 2 cores show ≈ 100 % busy). The spinning threads run at normal priority: they compete directly with A's control loop, are preempted at once by B's priority-90 thread, and are kept off core 3 in B-iso; the MCU loop of Config C is not affected. With spinning turned off, Linux would have more idle time, which may reduce A's lateness; we did not measure this.
 - **Repeats:** 2 per realistic condition; the two `rboth` repeats ran in one session, so they show within-session spread, not day-to-day variation. A's miss rate varied most (2.4 vs 4.7 %).
-- **Run length:** Linux runs are 180,000 cycles, Config C runs 10,000 (compared through 10,000-cycle blocks).
+- **Run length:** Linux runs are 180,000 cycles, Config C runs 10,000 (MCU memory limit). A longer run tends to catch a larger worst case, so ratios are quoted per 10,000-cycle block; C's 0 misses rest on 20,000 cycles per tier.
+- **Latent MCU timing issue (found in the PR review, Nov 19):** the MCU loop sleeps 6 ms whenever more than 3 ms remain in a cycle. If a cycle ever started more than ≈ 3.5 ms late, that sleep would overshoot the next tick and the lateness would carry into the following cycles. It cannot have happened in our runs (worst case ≈ 10 µs). The measured sketches are left unchanged so the code matches the data; a fix (sleep only if more than 7 ms remain) is noted in the code for future versions.
 
 ---
 

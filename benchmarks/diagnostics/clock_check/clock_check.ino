@@ -64,6 +64,10 @@ String test_loop_sleep_vs_spin(int with_sleep) {
 
     if (with_sleep) {
       int32_t rem_us = (int32_t)(next_us - micros());
+      // Known latent issue (found in the PR #7 review, 2026-11-19): if a cycle starts more than
+      // about 3.5 ms late, delay(6) overshoots the next deadline and the lateness carries into the
+      // following cycles. Not triggered: measured Config C worst cases are in the microsecond range. Left as is
+      // so this file matches the code that produced the data; a fix would sleep only if rem_us > 7000.
       if (rem_us > 3000) {
         delay(6);
       }
