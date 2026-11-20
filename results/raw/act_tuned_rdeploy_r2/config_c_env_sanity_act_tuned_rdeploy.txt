@@ -1,0 +1,3 @@
+# Linux-side load samples on the DUT for tag sanity_act_tuned_rdeploy (stress 0%). busy = 1 - d(idle+iowait)/d(total) over 1 s from /proc/stat.
+sample=start time=2026-11-18T18:48:14 stress_ng_procs=0 busy_cpu=2.7 busy_cpu0=5.0 busy_cpu1=4.0 busy_cpu2=1.0 busy_cpu3=1.0 loadavg=0.23/0.25/0.57 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=1420800,1420800,1420800,1420800 temp_max_c=37.7
+sample=mid time=2026-11-18T18:48:18 stress_ng_procs=0 busy_cpu=2.2 busy_cpu0=4.0 busy_cpu1=1.0 busy_cpu2=0.0 busy_cpu3=4.9 loadavg=0.21/0.24/0.57 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=1420800,1420800,1420800,1420800 temp_max_c=37.4

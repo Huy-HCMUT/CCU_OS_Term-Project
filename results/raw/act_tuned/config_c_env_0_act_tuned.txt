@@ -1,0 +1,3 @@
+# Linux-side load samples on the DUT for tag 0_act_tuned (stress 0%). busy = 1 - d(idle+iowait)/d(total) over 1 s from /proc/stat.
+sample=start time=2026-11-18T00:07:16 stress_ng_procs=0 busy_cpu=1.8 busy_cpu0=1.0 busy_cpu1=3.0 busy_cpu2=3.0 busy_cpu3=1.0 loadavg=0.08/0.04/0.05 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=1017600,1017600,1017600,2016000 temp_max_c=37.1
+sample=mid time=2026-11-18T00:08:11 stress_ng_procs=0 busy_cpu=2.2 busy_cpu0=2.9 busy_cpu1=3.0 busy_cpu2=1.0 busy_cpu3=1.0 loadavg=0.10/0.06/0.06 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=2016000,1305600,1305600,1305600 temp_max_c=36.4

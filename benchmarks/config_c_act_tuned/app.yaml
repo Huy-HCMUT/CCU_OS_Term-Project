@@ -1,0 +1,9 @@
+name: config_c_act_tuned
+description: Config C tuned IPC + PWM speed command to the drive board (Phase 6b)
+icon: ⏫
+profiles:
+  default:
+    platforms:
+      - platform: arduino:zephyr
+default_profile: default
+

@@ -1,0 +1,12 @@
+{
+  "mode": "bulk",
+  "host": "192.168.50.70",
+  "port": 5557,
+  "start_iso": "2026-11-18T00:45:03+08:00",
+  "last_iso": "2026-11-18T00:47:23+08:00",
+  "elapsed_s": 140.21,
+  "bytes_sent": 862846976,
+  "avg_rate_Bps": 6153982.3,
+  "reconnects": 0,
+  "late_skips": 0
+}

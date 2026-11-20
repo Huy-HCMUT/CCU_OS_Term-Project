@@ -1,0 +1,1674 @@
+{
+ "sanity": [
+  [
+   "3125036249",
+   "docker ps --format '{{.Names}}' | grep -E 'pin_test' | head -n 1"
+  ],
+  [
+   "253074993",
+   "docker ps --format '{{.Names}}' | grep -E 'referee_bench' | head -n 1"
+  ],
+  [
+   "3125036249",
+   "docker exec tmp-pin_test-main-1 python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('check_dwt_status', 0))\""
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 sh -c \"echo 'START 20' > /tmp/referee_cmd\""
+  ],
+  [
+   "3125036249",
+   "docker exec tmp-pin_test-main-1 python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('start_zephyr_pulses', 20))\""
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 sh -c \"echo 'STOP /home/arduino/referee_sanity.csv' > /tmp/referee_cmd\""
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker cp home-arduino-arduinoapps-referee_bench-main-1:/home/arduino/referee_sanity.csv /home/arduino/referee_sanity.csv"
+  ],
+  [
+   "run",
+   [
+    "C:\\Users\\Hyen\\platform-tools\\adb.exe",
+    "-s",
+    "253074993",
+    "pull",
+    "/home/arduino/referee_sanity.csv",
+    "<RAW>/config_c_referee_sanity.csv"
+   ]
+  ],
+  [
+   "3125036249",
+   "docker exec tmp-pin_test-main-1 python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('get_dwt_chunk', 0))\""
+  ]
+ ],
+ "s0": [
+  [
+   "3125036249",
+   "docker ps --format '{{.Names}}' | grep -E 'pin_test' | head -n 1"
+  ],
+  [
+   "253074993",
+   "docker ps --format '{{.Names}}' | grep -E 'referee_bench' | head -n 1"
+  ],
+  [
+   "3125036249",
+   "docker exec tmp-pin_test-main-1 python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('check_dwt_status', 0))\""
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 sh -c \"echo 'START 10000' > /tmp/referee_cmd\""
+  ],
+  [
+   "3125036249",
+   "docker exec tmp-pin_test-main-1 python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('start_zephyr_pulses', 10000))\""
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 sh -c \"echo 'STOP /home/arduino/referee_0.csv' > /tmp/referee_cmd\""
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker cp home-arduino-arduinoapps-referee_bench-main-1:/home/arduino/referee_0.csv /home/arduino/referee_0.csv"
+  ],
+  [
+   "run",
+   [
+    "C:\\Users\\Hyen\\platform-tools\\adb.exe",
+    "-s",
+    "253074993",
+    "pull",
+    "/home/arduino/referee_0.csv",
+    "<RAW>/config_c_referee_0.csv"
+   ]
+  ],
+  [
+   "3125036249",
+   "docker exec tmp-pin_test-main-1 python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('get_dwt_chunk', 0))\""
+  ]
+ ],
+ "s50": [
+  [
+   "3125036249",
+   "docker ps --format '{{.Names}}' | grep -E 'pin_test' | head -n 1"
+  ],
+  [
+   "253074993",
+   "docker ps --format '{{.Names}}' | grep -E 'referee_bench' | head -n 1"
+  ],
+  [
+   "3125036249",
+   "docker exec tmp-pin_test-main-1 python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('check_dwt_status', 0))\""
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 sh -c \"echo 'START 10000' > /tmp/referee_cmd\""
+  ],
+  [
+   "popen",
+   [
+    "C:\\Users\\Hyen\\platform-tools\\adb.exe",
+    "-s",
+    "3125036249",
+    "shell",
+    "stress-ng --cpu 1 --taskset 0 --hdd 1 --vm 1 --vm-bytes 25% --quiet"
+   ]
+  ],
+  [
+   "3125036249",
+   "docker exec tmp-pin_test-main-1 python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('start_zephyr_pulses', 10000))\""
+  ],
+  [
+   "3125036249",
+   "killall -9 stress-ng 2>/dev/null"
+  ],
+  [
+   "3125036249",
+   "sudo pkill -9 stress-ng 2>/dev/null"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 sh -c \"echo 'STOP /home/arduino/referee_50.csv' > /tmp/referee_cmd\""
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker cp home-arduino-arduinoapps-referee_bench-main-1:/home/arduino/referee_50.csv /home/arduino/referee_50.csv"
+  ],
+  [
+   "run",
+   [
+    "C:\\Users\\Hyen\\platform-tools\\adb.exe",
+    "-s",
+    "253074993",
+    "pull",
+    "/home/arduino/referee_50.csv",
+    "<RAW>/config_c_referee_50.csv"
+   ]
+  ],
+  [
+   "3125036249",
+   "docker exec tmp-pin_test-main-1 python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('get_dwt_chunk', 0))\""
+  ]
+ ],
+ "s100": [
+  [
+   "3125036249",
+   "docker ps --format '{{.Names}}' | grep -E 'pin_test' | head -n 1"
+  ],
+  [
+   "253074993",
+   "docker ps --format '{{.Names}}' | grep -E 'referee_bench' | head -n 1"
+  ],
+  [
+   "3125036249",
+   "docker exec tmp-pin_test-main-1 python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('check_dwt_status', 0))\""
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 sh -c \"echo 'START 10000' > /tmp/referee_cmd\""
+  ],
+  [
+   "popen",
+   [
+    "C:\\Users\\Hyen\\platform-tools\\adb.exe",
+    "-s",
+    "3125036249",
+    "shell",
+    "stress-ng --cpu 2 --taskset 0 --cache 2 --hdd 1 --vm 1 --vm-bytes 50% --quiet"
+   ]
+  ],
+  [
+   "3125036249",
+   "docker exec tmp-pin_test-main-1 python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('start_zephyr_pulses', 10000))\""
+  ],
+  [
+   "3125036249",
+   "killall -9 stress-ng 2>/dev/null"
+  ],
+  [
+   "3125036249",
+   "sudo pkill -9 stress-ng 2>/dev/null"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 sh -c \"echo 'STOP /home/arduino/referee_100.csv' > /tmp/referee_cmd\""
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker exec home-arduino-arduinoapps-referee_bench-main-1 cat /tmp/referee_status"
+  ],
+  [
+   "253074993",
+   "docker cp home-arduino-arduinoapps-referee_bench-main-1:/home/arduino/referee_100.csv /home/arduino/referee_100.csv"
+  ],
+  [
+   "run",
+   [
+    "C:\\Users\\Hyen\\platform-tools\\adb.exe",
+    "-s",
+    "253074993",
+    "pull",
+    "/home/arduino/referee_100.csv",
+    "<RAW>/config_c_referee_100.csv"
+   ]
+  ],
+  [
+   "3125036249",
+   "docker exec tmp-pin_test-main-1 python3 -c \"from arduino.app_utils import Bridge; print(Bridge.call('get_dwt_chunk', 0))\""
+  ]
+ ]
+}

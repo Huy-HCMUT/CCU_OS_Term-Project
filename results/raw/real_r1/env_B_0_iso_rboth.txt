@@ -1,0 +1,18 @@
+# irqs_moved=51 of 81
+# wifi_irq 140 effective=0
+# wifi_irq 141 effective=0
+# wifi_irq 142 effective=0
+# wifi_irq 143 effective=0
+# wifi_irq 144 effective=0
+# wifi_irq 145 effective=0
+# wifi_irq 146 effective=0
+# wifi_irq 147 effective=0
+# wifi_irq 148 effective=0
+# wifi_irq 149 effective=0
+# wifi_irq 150 effective=0
+# wifi_irq 151 effective=0
+# loadcheck start: LOADCHECK OK tier=rboth rx_Bps=6611788 inferences=60
+sample=start time=2026-11-18T07:35:56 stress_ng_procs=0 busy_cpu=72.9 busy_cpu0=100.0 busy_cpu1=64.4 busy_cpu2=100.0 busy_cpu3=25.7 loadavg=2.18/2.60/2.88 governor=performance,performance,performance,performance cur_freq_khz=2016000,2016000,2016000,2016000 temp_max_c=58.5
+sample=mid time=2026-11-18T07:50:57 stress_ng_procs=0 busy_cpu=72.6 busy_cpu0=62.6 busy_cpu1=100.0 busy_cpu2=100.0 busy_cpu3=27.3 loadavg=2.96/2.93/2.92 governor=performance,performance,performance,performance cur_freq_khz=2016000,2016000,2016000,2016000 temp_max_c=61.6
+# loadcheck mid: LOADCHECK OK tier=rboth rx_Bps=6687523 inferences=60
+# loadcheck end: LOADCHECK OK tier=rboth rx_Bps=6320381 inferences=60

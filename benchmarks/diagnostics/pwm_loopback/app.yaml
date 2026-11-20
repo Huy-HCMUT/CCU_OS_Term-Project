@@ -1,0 +1,3 @@
+name: pwm_loopback
+description: PWM loopback diagnostic (D3 to D8, board 3 only)
+icon: 🔁

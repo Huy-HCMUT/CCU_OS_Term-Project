@@ -1,0 +1,14 @@
+sample=start time=2026-11-15T10:15:49 stress_ng_procs=5 busy_cpu=25.9 busy_cpu0=100.0 busy_cpu1=1.0 busy_cpu2=1.0 busy_cpu3=1.0 loadavg=1.32/3.92/2.92 governor=performance
+performance
+performance
+performance cur_freq_khz=2016000
+2016000
+2016000
+2016000 temp_max_c=49.0
+sample=mid time=2026-11-15T10:16:40 stress_ng_procs=5 busy_cpu=26.1 busy_cpu0=100.0 busy_cpu1=2.0 busy_cpu2=3.0 busy_cpu3=0.0 loadavg=2.76/3.92/2.98 governor=performance
+performance
+performance
+performance cur_freq_khz=2016000
+2016000
+2016000
+2016000 temp_max_c=51.6

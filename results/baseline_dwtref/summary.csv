@@ -1,0 +1,4 @@
+series,config,tag,stress_pct,files,format,cycles,lateness_mean_us,jitter_std_us,lateness_min_us,lateness_p50_us,lateness_p99_us,lateness_p99_9_us,wcl_max_us,misses_1000us,dmr_1000us_pct,misses_200us,dmr_200us_pct,severe_starvation_40ms,period_mean_us,period_std_us,notes
+C-b2,C,b2,0,C_0_b2.csv,wake-only,10000,6.2788,15.2229,0.0000,1.6097,54.6944,54.8162,54.9564,0,0.0000,0,0.0000,0,10005.4545,22.2896,fitted period 10005.4545 us (+545.5 ppm); lateness relative to best-case cycle
+C-b2,C,b2,50,C_50_b2.csv,wake-only,10000,6.2881,15.2234,0.0000,1.6185,54.7031,54.8547,54.9719,0,0.0000,0,0.0000,0,10005.4545,22.2913,fitted period 10005.4545 us (+545.5 ppm); lateness relative to best-case cycle
+C-b2,C,b2,100,C_100_b2.csv,wake-only,10000,5.9702,14.2058,0.0000,1.6389,51.0688,51.2398,51.3779,0,0.0000,0,0.0000,0,10005.4546,20.6884,fitted period 10005.4545 us (+545.5 ppm); lateness relative to best-case cycle

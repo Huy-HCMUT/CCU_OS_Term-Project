@@ -1,0 +1,4 @@
+# Linux-side load samples on the DUT for tag 0_act_tuned_rdeploy (stress 0%). busy = 1 - d(idle+iowait)/d(total) over 1 s from /proc/stat.
+sample=start time=2026-11-18T18:49:14 stress_ng_procs=0 busy_cpu=65.3 busy_cpu0=100.0 busy_cpu1=25.2 busy_cpu2=100.0 busy_cpu3=36.6 loadavg=1.22/0.49/0.63 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=2016000,2016000,2016000,2016000 temp_max_c=52.2
+sample=mid time=2026-11-18T18:50:08 stress_ng_procs=0 busy_cpu=65.2 busy_cpu0=100.0 busy_cpu1=30.6 busy_cpu2=100.0 busy_cpu3=29.0 loadavg=2.20/0.88/0.76 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=2016000,2016000,2016000,2016000 temp_max_c=54.4
+# loadcheck mid: LOADCHECK OK tier=rdeploy rx_Bps=53662 inferences=60

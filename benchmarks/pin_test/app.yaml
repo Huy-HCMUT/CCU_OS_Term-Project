@@ -1,0 +1,8 @@
+name: pin_test
+description: Config C baseline (no IPC) DUT app, sketch = benchmarks/config_c_sender_sketch.ino
+icon: 📍
+profiles:
+  default:
+    platforms:
+      - platform: arduino:zephyr
+default_profile: default

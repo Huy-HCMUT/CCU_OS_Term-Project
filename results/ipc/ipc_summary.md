@@ -1,0 +1,15 @@
+# Config C IPC Telemetry Summary
+
+| tag | cycles | sent | sent_ok | send_errors | skipped_slots | rx_count | first_cycle_with_ipc | distinct_applied | unobserved_ok | setpoint_mismatch | age_p50_cyc | age_p99_cyc | age_max_cyc | rtt_p50_us | rtt_p99_us | rtt_max_us |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 0_ipc | 10000 | 1241 | 1241 | 0 | 0 | 1241 | 0 | 1174 | 0 | 0 | 4.0000 | 8.0000 | 8.0000 | 8202.9000 | 9164.9800 | 13099.4000 |
+| 100_ipc | 10000 | 1273 | 1273 | 0 | 0 | 1273 | 0 | 1174 | 0 | 0 | 4.0000 | 8.0000 | 10.0000 | 7993.3000 | 9978.7800 | 15547.8000 |
+| 50_ipc | 10000 | 1267 | 1267 | 0 | 0 | 1267 | 0 | 1174 | 0 | 0 | 4.0000 | 8.0000 | 8.0000 | 7872.5000 | 9230.4580 | 11238.5000 |
+| sanity_ipc | 20 | 73 | 73 | 0 | 0 | 73 | 0 | 3 | 0 | 0 | 3.0000 | 6.8100 | 7.0000 | 7617.3000 | 12644.7600 | 16476.6000 |
+
+### Observations & Flags
+
+- **Tag `0_ipc`:** Clean execution (0 errors, 0 mismatches, IPC active from cycle 0).
+- **Tag `100_ipc`:** Clean execution (0 errors, 0 mismatches, IPC active from cycle 0).
+- **Tag `50_ipc`:** Clean execution (0 errors, 0 mismatches, IPC active from cycle 0).
+- **Tag `sanity_ipc`:** Clean execution (0 errors, 0 mismatches, IPC active from cycle 0).

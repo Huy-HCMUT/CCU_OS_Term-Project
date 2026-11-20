@@ -1,0 +1,3 @@
+tag,cycles,sent,sent_ok,send_errors,skipped_slots,rx_count,first_cycle_with_ipc,distinct_applied,unobserved_ok,setpoint_mismatch,age_p50_cyc,age_p99_cyc,age_max_cyc,rtt_p50_us,rtt_p99_us,rtt_max_us
+100_ipc_tuned_allcore,10000,1363,1363,0,3,1363,0,1171,0,0,4.0000,8.0000,38.0000,7656.5000,14444.1820,238100.4000
+sanity_ipc_tuned_allcore,20,86,86,0,0,86,0,3,0,0,3.0000,7.8100,8.0000,7480.6000,11321.7600,12226.5000

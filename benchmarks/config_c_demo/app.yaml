@@ -1,0 +1,9 @@
+name: config_c_demo
+description: M3 demo - setpoint shown on the MCU LED (not for measurements)
+icon: 💡
+profiles:
+  default:
+    platforms:
+      - platform: arduino:zephyr
+default_profile: default
+

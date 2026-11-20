@@ -1,0 +1,6 @@
+# date: 2026-11-17T15:26:39
+# board_role: board3 (pwm loopback, D3 -> D8 jumper)
+# core: 1.0.0
+# container: tmp-pwm_loopback-main-1
+# seconds: 100
+# switches: 200

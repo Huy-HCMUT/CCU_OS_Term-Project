@@ -1,0 +1,3 @@
+# Linux-side load samples on the DUT for tag 100_ipc_tuned_allcore (stress 100%). busy = 1 - d(idle+iowait)/d(total) over 1 s from /proc/stat.
+sample=start time=2026-11-15T23:55:24 stress_ng_procs=10 busy_cpu=100.0 busy_cpu0=100.0 busy_cpu1=100.0 busy_cpu2=100.0 busy_cpu3=100.0 loadavg=0.55/0.98/1.45 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=2016000,2016000,2016000,2016000 temp_max_c=52.5
+sample=mid time=2026-11-15T23:56:20 stress_ng_procs=10 busy_cpu=100.0 busy_cpu0=100.0 busy_cpu1=100.0 busy_cpu2=100.0 busy_cpu3=100.0 loadavg=6.50/2.62/1.99 governor=schedutil,schedutil,schedutil,schedutil cur_freq_khz=2016000,2016000,2016000,2016000 temp_max_c=61.3
