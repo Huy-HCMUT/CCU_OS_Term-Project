@@ -1,0 +1,18 @@
+\section{Introduction}
+\label{sec:intro}
+
+Industrial maintenance is moving from \emph{predictive} to \emph{prescriptive}. A predictive system analyses vibration and reports a likely fault to a person, so a late result costs seconds. A prescriptive system acts on its own: it lowers spindle speed or changes the feed when the analysis says so. That closes a control loop, and the loop has a hard deadline.
+
+Consider a CNC cell with a sensory tool holder. Vibration is streamed to an AI model on a Linux ``digital twin'' host, which also handles program downloads, camera uploads and plant networking. A 10\,ms loop applies the resulting speed or feed override. The AI's advice may arrive many milliseconds late without harm, because tool wear develops over minutes. The loop that changes the machine's command may not be late.
+
+This exposes an operating-system dilemma. A general-purpose OS such as Linux offers the software stack the analytics need, but its scheduler and the kernel's own work can delay a time-critical thread. A real-time OS such as Zephyr bounds timing by design but cannot run the analytics stack. Asymmetric multiprocessing (AMP) boards put both on one board: the Arduino UNO Q~\cite{arduino_unoq} pairs a Qualcomm QRB2210 (four Cortex-A53 cores, Debian Linux) with an STM32U585 microcontroller (Cortex-M33, Zephyr).
+
+We ask: \emph{where should the 10\,ms loop run so that a busy Linux side cannot make it late?} Our contributions are:
+\begin{itemize}
+\item A like-for-like comparison of four placements of the same loop (A, B, B-iso, C; Section~\ref{sec:system}) on real hardware, with one lateness definition for all of them and an external timing referee.
+\item Measurements under both synthetic load (\texttt{stress-ng}) and realistic edge load (Wi-Fi traffic and a containerised CNN), including the full chain from analytics to an emulated motor drive.
+\item Two explanations of the results: kernel work, not CPU load, limits \texttt{SCHED\_FIFO} on a stock kernel; and thread priority, not the RTOS itself, decides the microcontroller's timing.
+\item Uncertainty for every headline figure (intervals on miss ratios, bootstrap ranges on worst cases and ratios), so the size of each claim is clear.
+\end{itemize}
+
+Section~\ref{sec:background} reviews the scheduling background, Section~\ref{sec:system} describes the system, Section~\ref{sec:method} the method, Section~\ref{sec:results} the results and Section~\ref{sec:discussion} their interpretation. Section~\ref{sec:limitations} states the limitations and Section~\ref{sec:conclusion} concludes.

@@ -1,0 +1,14 @@
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{What limits each configuration}
+\textbf{A} competes with the CNN's threads for CPU time under a fair scheduler and waits several milliseconds for its turn; CPU-heavy work (\texttt{rdeploy}) hurts it most.
+
+\textbf{B} preempts every normal program at once, which is why it kept every \texttt{rdeploy} cycle under 1\,ms with two cores near 100\,\% busy. It cannot preempt interrupt handlers or the softirq work that runs when an interrupt returns, and network traffic produces exactly that work. This is the most likely reason network traffic pushed B past 1\,ms; we did not trace it.
+
+\textbf{B-iso} illustrates the same limit more sharply. Moving our programs and the movable interrupts away left core 3 as the only core with spare time, and the kernel placed more of its own work there. Under \texttt{rboth} the whole board was equally busy in B and B-iso (about 71\,\%), and B's loop shared cores that were 40--85\,\% busy, yet B's worst case beat B-iso's on a core only 24\,\% busy. For a real-time thread on a stock kernel, the non-preemptible kernel work on its core matters more than how busy the core looks. The counters are run averages: they are consistent with this explanation but do not prove the cause of each late cycle.
+
+\textbf{C} runs on a separate processor with its own RTOS. Linux load could delay the setpoint, never the tick, and the tick's worst case changed by only a few microseconds between idle and the heaviest load. The one large effect on C came from inside the MCU: with library defaults, the communication thread outranked the control loop. An RTOS does not make a loop real-time by itself; its priority assignment does.
+
+\subsection{What this means for the CNC example}
+Assume a feed of 6\,m/min (100\,mm/s). A tick that runs late leaves the machine on its previous command for that long. A's worst delay (10.7\,ms) is about 1.1\,mm of tool travel on the old command, and at its measured miss ratios it would be late 8{,}500--17{,}000 times per hour. B's worst delay (1.54\,ms) is 0.15\,mm, late 50--130 times per hour. Config C's worst delay (10.5\us) is about 1\,µm. No rate can be extrapolated from zero misses in 20{,}000 cycles, but its worst case is 100$\times$ below the deadline. The design that follows matches how such cells are built in industry: let the digital-twin host be as busy as it needs, since its advice arriving 16\,ms late is harmless for wear that develops over minutes, and run the loop that acts on the machine on a dedicated real-time processor.

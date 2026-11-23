@@ -1,0 +1,38 @@
+% Owner: Quang-Huy Nguyen (P7.1: hardware setup, Linux experiments, IPC implementation). Draft by An-Rui Peng; please review.
+\section{System Design}
+\label{sec:system}
+
+\subsection{Hardware}
+The device under test (DUT) is an Arduino UNO Q~\cite{arduino_unoq}: a Qualcomm QRB2210 with four Cortex-A53 cores at up to 2.016\,GHz, running Debian~13 with the stock kernel 6.16 (\texttt{PREEMPT}, not \texttt{PREEMPT\_RT}), and an STM32U585 Cortex-M33 at 160\,MHz running the Zephyr-based Arduino core. The two chips communicate over Arduino's RouterBridge, a remote-procedure-call layer over an internal serial link. Two further UNO Q boards complete the bench (Fig.~\ref{fig:bench}): a \emph{referee} timestamps the DUT's tick pulse on pin D2 with its own DWT cycle counter, and a \emph{drive emulator} decodes the speed command that the DUT sends as 500\,Hz PWM on pin D3. A PC starts every run over USB and generates the network load over Wi-Fi.
+
+\begin{figure}[t]
+\centering
+\setlength{\fboxsep}{6pt}
+\fbox{\parbox{0.92\columnwidth}{\small
+\textbf{PC} --- Wi-Fi (traffic, sensor stream) $\rightarrow$ \textbf{DUT}\\[2pt]
+\textbf{DUT, Linux side:} load, analytics, loop in A/B/B-iso\\
+\textbf{DUT, MCU side:} loop in C\\[2pt]
+DUT D2 (tick pulse) $\rightarrow$ \textbf{Referee} (times every tick)\\
+DUT D3 (500\,Hz PWM speed command) $\rightarrow$ \textbf{Drive emulator}\\
+PC --- USB/adb (control only) --- all boards; grounds joined}}
+\caption{Test bench: DUT, external referee and drive emulator.}
+\label{fig:bench}
+\end{figure}
+
+\subsection{The control loop and the analytics}
+Every configuration runs the same minimal loop: wake at the next release time of a fixed 10\,ms schedule, read the latest setpoint, store a timestamp in RAM, and sleep. Nothing is written to storage during a run. The analytics (Hann window, 1{,}024-point FFT, setpoint rule) run separately every 85.33\,ms on replayed CWRU frames, so only the operating system's behaviour differs between configurations.
+
+On Linux the loop is a thread of a C benchmark that sleeps with \texttt{clock\_nanosleep(CLOCK\_MONOTONIC, TIMER\_ABSTIME)}; the analytics run in a second, normal-priority thread. On the MCU the loop is an Arduino sketch scheduled with \texttt{micros()}: it records the DWT cycle counter, reads the setpoint, emits a 500\us{} pulse on D2, sleeps 6\,ms when more than 3\,ms remain, and spins to the release time.
+
+\subsection{Configurations}
+\begin{itemize}
+\item \textbf{A}: the Linux loop thread under \texttt{SCHED\_OTHER} (EEVDF).
+\item \textbf{B}: the same thread under \texttt{SCHED\_FIFO}, priority 90, with \texttt{mlockall}.
+\item \textbf{B-iso}: B pinned to core 3; our load, the analytics and the 51 movable interrupts (of 81) moved to cores 0--2; deep CPU idle states disabled through \texttt{/dev/cpu\_dma\_latency}. Isolation is by affinity only, with no boot-time isolation.
+\item \textbf{C}: the loop on the MCU. Linux sends each new setpoint over RouterBridge; in the full-chain runs the MCU also outputs it as PWM to the drive emulator.
+\end{itemize}
+
+\subsection{Linux-to-MCU link}
+The link is ``latest value wins''. Linux calls \texttt{set\_setpoint(seq, sp)}; the MCU handler packs the sequence number and setpoint into one aligned 32-bit word, \texttt{(seq $\ll$ 8) | sp}, which is a single atomic store on the Cortex-M33. The loop reads that word once per tick with one load and logs it, so it never waits for Linux and never sees a torn value. A late message delays the advice, never the tick.
+
+On Zephyr a lower number means a higher priority. With the Arduino library defaults (\emph{stock}) the sketch's loop runs at priority 14 and RouterBridge's bridge thread at 5, so message handling can preempt the loop. The \emph{tuned} variant raises the loop to priority 4 with one call at the end of \texttt{setup()}; everything else is unchanged. We report both.

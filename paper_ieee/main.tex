@@ -1,0 +1,57 @@
+% Final report (M4), CCU Operating Systems, Fall 2026.
+% Build: cd paper_ieee && latexmk -pdf main.tex   (or: pdflatex main; bibtex main; pdflatex main; pdflatex main)
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage{cite}
+
+\graphicspath{{../results/phase6b/}{../results/phase5d/}}
+\sisetup{detect-all, group-minimum-digits=4}
+
+\newcommand{\Lrel}{L_{\mathrm{rel}}}
+\newcommand{\us}{\,\textmu s}
+
+\begin{document}
+
+\title{Where Should a 10\,ms Control Loop Live?\\
+Benchmarking Linux and Zephyr on a Heterogeneous Edge Controller}
+
+\author{
+\IEEEauthorblockN{Quang-Huy Nguyen}
+\IEEEauthorblockA{Student ID 615461004\\
+Dept.\ of Computer Science and Information Engineering\\
+National Chung Cheng University, Taiwan}
+\and
+\IEEEauthorblockN{An-Rui Peng}
+\IEEEauthorblockA{Student ID 614461008\\
+Dept.\ of Computer Science and Information Engineering\\
+National Chung Cheng University, Taiwan}
+}
+
+\maketitle
+
+\input{sections/abstract}
+\input{sections/introduction}
+\input{sections/background}
+\input{sections/system}
+\input{sections/methodology}
+\input{sections/results}
+\input{sections/discussion}
+\input{sections/limitations}
+\input{sections/conclusion}
+\input{sections/contributions}
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

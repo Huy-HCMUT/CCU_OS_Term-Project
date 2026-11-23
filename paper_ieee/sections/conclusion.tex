@@ -1,0 +1,14 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+We placed the same 10\,ms control loop in four places on one heterogeneous edge controller and measured it under synthetic and realistic load with one lateness definition. Four findings stand out.
+
+First, \texttt{SCHED\_FIFO} makes Linux robust against busy programs but not against the kernel's own work. Under network traffic plus a containerised CNN, every Linux configuration missed the 1\,ms deadline, the best of them in 0.025\,\% of cycles with a worst case of 1.5\,ms.
+
+Second, reserving a core by affinity alone made \texttt{SCHED\_FIFO} worse, not better, because the kernel moved its interrupt and softirq work onto the reserved core.
+
+Third, the real-time microcontroller kept every tick within about 10\us{} at every load level, a typical worst case 34$\times$ below the best Linux configuration (range 18--103$\times$) and about 600$\times$ below default Linux, and delivered all 1{,}920 speed commands to the emulated drive. Linux load delayed only the setpoint, which the loop never waits for.
+
+Fourth, the microcontroller's advantage depended on one priority setting. With library defaults its communication thread delayed the loop by up to 0.8\,ms; raising the loop above it reduced the cost about 100-fold.
+
+For prescriptive maintenance on AMP hardware, the answer to our question is: run the analytics on Linux and the loop that acts on the machine on the real-time core, with the loop given the highest priority there. Priorities are part of the design on both sides.
