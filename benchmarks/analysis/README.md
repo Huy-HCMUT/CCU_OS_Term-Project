@@ -15,6 +15,7 @@ All scripts run on the PC (`.venv\Scripts\python <script> --help` for options), 
 | `compare_realload.py` | 6a, 6b | `real_r*/`, `act_tuned*/`, `results/phase5d/compare_long.csv` (`--ref`) | `results/phase6b/` (`--out`) | **Headline comparison** under realistic load; load evidence per run; kernel work per CPU (`cpu_interference.csv`); CPU busy per core (`core_busy.png`). |
 | `analyze_drive.py` | 6b | `act_tuned*/` (`config_c_act_*`, `config_c_drive_*`, IPC logs) | `results/phase6b/drive.md`, `drive_long.csv` | Every speed command matched at the emulated drive: lost / wrong / extra, tick-to-drive delays. |
 | `headline_stats.py` | 6a, 6b | the same runs as `compare_realload.py` | `results/phase6b/headline_stats.{md,csv}` | Error bars for the headline: 95 % intervals on miss ratios (≤ 3/n bound for zero misses), bootstrap intervals on the block worst case, Linux ÷ C ratio ranges. |
+| `replay_animation.py` | 6a, 6b | `real_r*/`, `act_tuned_*/` | `results/replay/replay_<tier>_r<rep>.{mp4,png}` | Video replay of the recorded lateness of A, B (B-iso) and C, for the demo video (`docs/Demo_Video_Plan.md`). Needs ffmpeg for the MP4. |
 
 The commands that produced the committed results:
 
