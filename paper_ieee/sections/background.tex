@@ -1,0 +1,15 @@
+\section{Background}
+\label{sec:background}
+
+\subsection{Scheduling on Linux}
+Ordinary Linux threads use \texttt{SCHED\_OTHER}, served by the fair scheduler. Since kernel 6.6 this is EEVDF (earliest eligible virtual deadline first~\cite{stoica1995eevdf,linux_sched_eevdf}), which replaced CFS. A fair scheduler shares the CPU in proportion to weight, so a time-critical thread waits behind every other runnable thread for its turn.
+
+The real-time policies \texttt{SCHED\_FIFO} and \texttt{SCHED\_RR} (priorities 1--99) always run ahead of \texttt{SCHED\_OTHER}: a woken \texttt{SCHED\_FIFO} thread preempts a normal program at once~\cite{linux_sched_rt}. Locking memory with \texttt{mlockall} removes page faults from its path. What a real-time thread cannot preempt is the kernel's own work in interrupt context: hardware interrupt handlers, inter-processor interrupts (IPIs) and the softirq processing (network receive, timers, RCU) that runs when an interrupt returns. A stock kernel built with \texttt{PREEMPT} also keeps sections that cannot be preempted. The \texttt{PREEMPT\_RT} patch set moves most of this work into schedulable threads and makes most kernel sections preemptible~\cite{reghenzani2019rtlinux}; our board runs the stock \texttt{PREEMPT} kernel.
+
+Placement matters as well. Affinity can pin a thread to one core and steer movable interrupts away from it, but without boot-time isolation (\texttt{isolcpus}, \texttt{nohz\_full}) the kernel can still schedule its own work on that core.
+
+\subsection{Scheduling on Zephyr}
+Zephyr is a priority-based, preemptive RTOS. Every thread has a fixed priority, and a lower number means a higher priority; a ready thread of higher priority preempts a lower one immediately~\cite{zephyr_threads}. Timing on an RTOS is therefore only as good as its priority assignment: a library thread placed above the control loop delays the loop whenever it runs.
+
+\subsection{Prescriptive maintenance workload}
+Our analytics use the Case Western Reserve University (CWRU) bearing data~\cite{cwru_data,smith2015cwru}: 12\,kHz vibration from healthy bearings and from bearings with inner-race, ball and outer-race faults. A 1{,}024-sample window spans 85.3\,ms, which sets the analytics cadence. A Hann window and FFT give the peak frequency, which a simple rule maps to a speed setpoint (100, 85, 70 or 60\,\%).

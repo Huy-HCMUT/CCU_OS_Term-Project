@@ -14,6 +14,8 @@ All scripts run on the PC (`.venv\Scripts\python <script> --help` for options), 
 | `compare_configs.py` | 5d | `linux_r*/` and all Config C folders | `results/phase5d/` | **Headline comparison** of A, B, B-iso and C under `stress-ng`, one lateness definition (`L_rel`). |
 | `compare_realload.py` | 6a, 6b | `real_r*/`, `act_tuned*/`, `results/phase5d/compare_long.csv` (`--ref`) | `results/phase6b/` (`--out`) | **Headline comparison** under realistic load; load evidence per run; kernel work per CPU (`cpu_interference.csv`); CPU busy per core (`core_busy.png`). |
 | `analyze_drive.py` | 6b | `act_tuned*/` (`config_c_act_*`, `config_c_drive_*`, IPC logs) | `results/phase6b/drive.md`, `drive_long.csv` | Every speed command matched at the emulated drive: lost / wrong / extra, tick-to-drive delays. |
+| `headline_stats.py` | 6a, 6b | the same runs as `compare_realload.py` | `results/phase6b/headline_stats.{md,csv}` | Error bars for the headline: 95 % intervals on miss ratios (≤ 3/n bound for zero misses), bootstrap intervals on the block worst case, Linux ÷ C ratio ranges. |
+| `replay_animation.py` | 6a, 6b | `real_r*/`, `act_tuned_*/` | `results/replay/replay_<tier>_r<rep>.{mp4,png}` | Video replay of the recorded lateness of A, B (B-iso) and C, for the demo video (`docs/Demo_Video_Plan.md`). Needs ffmpeg for the MP4. |
 
 The commands that produced the committed results:
 
@@ -23,6 +25,7 @@ python benchmarks/analysis/compare_configs.py --raw results/raw --out results/ph
 # Phase 6a + 6b
 python benchmarks/analysis/compare_realload.py --raw results/raw --ref results/phase5d/compare_long.csv --out results/phase6b
 python benchmarks/analysis/analyze_drive.py --raw results/raw --out results/phase6b
+python benchmarks/analysis/headline_stats.py --raw results/raw --out results/phase6b
 ```
 
 Tests 1–5 (Phase 2): `parse_advanced_metrics.py` prints the tables, `plot_advanced_results.py` writes `results/plots/test*.png` (both read `results/raw/test*_*.csv`; moved here from `results/` on 2026-11-18).

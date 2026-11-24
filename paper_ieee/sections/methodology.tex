@@ -1,0 +1,22 @@
+\section{Measurement Method}
+\label{sec:method}
+
+\subsection{Lateness}
+Cycle $k$ has release time $R_k = t_0 + 10k$\,ms and wake time $t_k$. We report lateness relative to the run's best cycle,
+\begin{equation}
+\Lrel(k) = (t_k - R_k) - \min_j (t_j - R_j),
+\end{equation}
+for every configuration. On Linux, $t_k$ comes from \texttt{CLOCK\_MONOTONIC}. On the MCU, $t_k$ comes from the DWT cycle counter; Zephyr's timekeeping loses cycles while the MCU sleeps, so the loop's true period is about 10.0055\,ms, and we fit the period by least squares before computing lateness. Removing this constant offset leaves jitter and worst cases unchanged. A cycle with $\Lrel > 1$\,ms is a deadline miss.
+
+The referee independently timestamps every tick pulse with its own DWT counter. An earlier referee used Zephyr's \texttt{k\_cycle\_get\_32()}, which loses cycles while sleeping; it reported an apparent $-390$\,ppm offset between the boards that disappeared ($-0.3$ to $+3$\,ppm) once the referee used DWT. Its largest deviation then matched the DUT's own worst case in the same runs.
+
+\subsection{Loads}
+\textbf{Synthetic.} \texttt{stress-ng}~\cite{stressng} in four tiers: idle; \emph{core-0 medium} (one CPU worker on core 0, one disk and one memory worker using 25\,\% of RAM); \emph{core-0 heavy} (two CPU and two cache workers on core 0, disk, memory at 50\,\%); and \emph{all-core} (four CPU workers and the same cache, disk and memory workers; three CPU workers on cores 0--2 for B-iso).
+
+\textbf{Realistic.} \texttt{rnet}: the PC sends bulk TCP over Wi-Fi, which the board receives at 5.8--6.8\,MB/s and discards. \texttt{rdeploy}: the PC streams CWRU vibration at its real rate (about 48\,kB/s) to a Docker container running a 1D-CNN under ONNX Runtime with three threads, at 11.7 inferences per second. \texttt{rboth}: both at once. Before, during and after each run the board checked that the load was present; all 60 checks passed.
+
+\subsection{Protocol}
+Linux runs are 180{,}000 cycles (30\,min); MCU runs are 10{,}000 cycles (100\,s), the most timestamps the MCU can hold. Linux runs used the \texttt{performance} governor at a fixed 2.016\,GHz; Config C runs kept the board default (\texttt{schedutil}), which does not affect the MCU's timing. No run reached thermal throttling (maximum 64.8\,\textdegree C). Synthetic tiers have 3 runs per Linux condition and 3--4 per Config C condition (1--2 for all-core); realistic tiers have 2 runs each. We wrote 15 predictions down before the realistic and full-chain runs and report which held.
+
+\subsection{Statistics}
+A longer run catches a larger worst case, so we split every run into 10{,}000-cycle blocks and compare the median of the block worst cases (``block WCL''). For miss ratios we give 95\,\% Wilson intervals~\cite{wilson1927}; with zero misses in $n$ cycles we give the exact one-sided 95\,\% bound $1-0.05^{1/n} \approx 3/n$. Block medians get 95\,\% bootstrap intervals~\cite{efron1993bootstrap} over pooled blocks. Config C has one block per run, so ratio ranges divide the Linux interval by C's worst and best block. Blocks within a run are correlated, so these intervals are optimistic; where two runs disagree beyond their intervals we quote the per-run values.
